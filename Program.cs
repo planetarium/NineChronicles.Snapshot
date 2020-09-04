@@ -15,7 +15,7 @@ using Libplanet.RocksDBStore;
 using Libplanet.Store;
 using Libplanet.Store.Trie;
 
-namespace Snapshot
+namespace NineChronicles.Snapshot
 {
     class Program
     {
