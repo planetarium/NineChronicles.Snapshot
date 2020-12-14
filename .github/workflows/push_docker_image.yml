@@ -1,0 +1,21 @@
+name: push docker image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v1
+      - name: login
+        run: docker login --username '${{ secrets.DOCKER_USERNAME }}' --password '${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}'
+      - name: build
+        run: docker build . -t planetariumhq/ninechronicles-snapshot:git-${{ github.sha }} -t planetariumhq/ninechronicles-snapshot:latest --build-arg COMMIT=git-${{ github.sha }}
+      - name: push git-version
+        run: docker push planetariumhq/ninechronicles-snapshot:git-${{ github.sha }}
+      - name: push latest
+        run: docker push planetariumhq/ninechronicles-snapshot:latest
