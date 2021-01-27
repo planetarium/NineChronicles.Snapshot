@@ -5,7 +5,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text.Json;
 using Bencodex.Types;
 using Cocona;
 using Libplanet;
@@ -14,6 +13,8 @@ using Libplanet.Blocks;
 using Libplanet.RocksDBStore;
 using Libplanet.Store;
 using Libplanet.Store.Trie;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace NineChronicles.Snapshot
 {
@@ -32,7 +33,8 @@ namespace NineChronicles.Snapshot
             [Option('o')]
             string outputDirectory = null,
             string storePath = null,
-            int blockBefore = 10)
+            int blockBefore = 10,
+            string apv = null)
         {
             string defaultStorePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -118,7 +120,11 @@ namespace NineChronicles.Snapshot
                 }
 
                 var snapshotTipHeader = snapshotTipDigest.Value.Header;
-                var json = JsonSerializer.Serialize(snapshotTipHeader);
+                var json = JsonConvert.SerializeObject(snapshotTipHeader);
+                var jObj = JObject.Parse(json);
+                jObj.Add("APV", apv);
+                json = JsonConvert.SerializeObject(jObj);
+
                 var metadataFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.json";
                 var metadataPath = Path.Combine(outputDirectory, metadataFilename);
                 if (File.Exists(metadataPath))
