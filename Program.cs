@@ -50,6 +50,11 @@ namespace NineChronicles.Snapshot
                 throw new CommandExitedException("Invalid store path. Please check --store-path is valid.", -1);
             }
 
+            if (apv == null)
+            {
+                throw new CommandExitedException("Apv value is null. Please enter the --apv value.", -1);
+            }
+
             var statesPath = Path.Combine(storePath, "states");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
 
