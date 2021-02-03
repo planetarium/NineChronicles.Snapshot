@@ -120,10 +120,9 @@ namespace NineChronicles.Snapshot
                 }
 
                 var snapshotTipHeader = snapshotTipDigest.Value.Header;
-                var jObj = new JObject();
-                jObj = JObject.FromObject(snapshotTipHeader);
-                jObj.Add("APV", apv);
-                var json = JsonConvert.SerializeObject(jObj);
+                JObject jsonObject = JObject.FromObject(snapshotTipHeader);
+                jsonObject.Add("APV", apv);
+                var jsonString = JsonConvert.SerializeObject(jsonObject);
 
                 var metadataFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.json";
                 var metadataPath = Path.Combine(outputDirectory, metadataFilename);
@@ -132,7 +131,7 @@ namespace NineChronicles.Snapshot
                     File.Delete(metadataPath);
                 }
 
-                File.WriteAllText(metadataPath, json);
+                File.WriteAllText(metadataPath, jsonString);
             }
             else
             {
