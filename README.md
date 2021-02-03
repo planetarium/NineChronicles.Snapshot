@@ -5,7 +5,7 @@
 리오그로 스냅샷이 동작하지 않는 경우를 피하기 위해 기본값으로 10블록 이전의 블록을 팁으로하는
 스냅샷을 만들며 `--block-before` 옵션을 통해 몇블록 전의 스냅샷을 찍을지 조정할 수 있습니다.
 
-팁 블록의 헤더 정보를 별도의 파일로 저장합니다. *{genesisHash}-snapshot-{tipHash}.json*
+팁 블록의 헤더 정보와 APV를 별도의 파일로 저장합니다. *{genesisHash}-snapshot-{tipHash}.json*
 
 생성한 스냅샷을 론처 업데이터에서 사용하게 하고 싶다면 *https://9c-test.s3.ap-northeast-2.amazonaws.com/latest/{genesisHash}-snapshot.zip*,
 *https://9c-test.s3.ap-northeast-2.amazonaws.com/latest/{genesisHash}-snapshot.json*
@@ -13,11 +13,12 @@
 
 ```
 $ dotnet run -- --help
-Usage: Snapshot [--output-directory <String>] [--store-path <String>] [--block-before <Int32>] [--help] [--version]
+Usage: Snapshot [--output-directory <String>] [--store-path <String>] [--block-before <Int32>] [--apv <String>] [--help] [--version]
 
 Snapshot
 
 Options:
+  --apv <String>                      (Required)
   -o, --output-directory <String>     (Default: )
   --store-path <String>               (Default: )
   --block-before <Int32>              (Default: 10)
