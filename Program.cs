@@ -30,11 +30,11 @@ namespace NineChronicles.Snapshot
 
         [Command]
         public void Snapshot(
+            string apv,
             [Option('o')]
             string outputDirectory = null,
             string storePath = null,
-            int blockBefore = 10,
-            string apv = null)
+            int blockBefore = 10)
         {
             string defaultStorePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -48,11 +48,6 @@ namespace NineChronicles.Snapshot
             if (!Directory.Exists(storePath))
             {
                 throw new CommandExitedException("Invalid store path. Please check --store-path is valid.", -1);
-            }
-
-            if (string.IsNullOrEmpty(apv))
-            {
-                throw new CommandExitedException("Apv value is null. Please enter the --apv value.", -1);
             }
 
             var statesPath = Path.Combine(storePath, "states");
@@ -125,10 +120,10 @@ namespace NineChronicles.Snapshot
                 }
 
                 var snapshotTipHeader = snapshotTipDigest.Value.Header;
-                var json = JsonConvert.SerializeObject(snapshotTipHeader);
-                var jObj = JObject.Parse(json);
+                var jObj = new JObject();
+                jObj = JObject.FromObject(snapshotTipHeader);
                 jObj.Add("APV", apv);
-                json = JsonConvert.SerializeObject(jObj);
+                var json = JsonConvert.SerializeObject(jObj);
 
                 var metadataFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.json";
                 var metadataPath = Path.Combine(outputDirectory, metadataFilename);

@@ -18,10 +18,10 @@ Usage: Snapshot [--output-directory <String>] [--store-path <String>] [--block-b
 Snapshot
 
 Options:
+  --apv <String>                      (Required)
   -o, --output-directory <String>     (Default: )
   --store-path <String>               (Default: )
   --block-before <Int32>              (Default: 10)
-  --apv <String>                      (Default: )
   -h, --help                         Show help message
   --version                          Show version
 ```
