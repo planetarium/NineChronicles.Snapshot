@@ -112,6 +112,12 @@ namespace NineChronicles.Snapshot
                     File.Delete(snapshotPath);
                 }
 
+                var blockPerceptPath = Path.Combine(storePath, "blockpercept");
+                if (Directory.Exists(blockPerceptPath))
+                {
+                    Directory.Delete(blockPerceptPath, true);
+                }
+
                 ZipFile.CreateFromDirectory(storePath, snapshotPath);
 
                 if (snapshotTipDigest is null)
