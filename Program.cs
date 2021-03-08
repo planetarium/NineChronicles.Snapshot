@@ -31,6 +31,7 @@ namespace NineChronicles.Snapshot
         [Command]
         public void Snapshot(
             string apv,
+            string workingDirectory,
             [Option('o')]
             string outputDirectory = null,
             string storePath = null,
@@ -44,16 +45,43 @@ namespace NineChronicles.Snapshot
             outputDirectory = string.IsNullOrEmpty(outputDirectory)
                 ? Environment.CurrentDirectory
                 : outputDirectory;
+
+            string latestMetadata = Directory.GetFiles(outputDirectory)
+                .Where(x => Path.GetExtension(x) == ".json")
+                .OrderByDescending(x => File.GetLastWriteTime(x))
+                .First();
+
+            int metadataBlockEpoch = 0;
+            int metadataTxEpoch = 0;
+            using (StreamReader reader = new StreamReader(latestMetadata))
+            {
+                var jsonString = reader.ReadToEnd();
+                var jsonObject = JObject.Parse(jsonString); 
+                metadataBlockEpoch = (int)jsonObject["BlockEpoch"];  
+                metadataTxEpoch = (int)jsonObject["TxEpoch"];             
+            }
+
             storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
             if (!Directory.Exists(storePath))
             {
                 throw new CommandExitedException("Invalid store path. Please check --store-path is valid.", -1);
             }
 
-            var statesPath = Path.Combine(storePath, "states");
-            var stateHashesPath = Path.Combine(storePath, "state_hashes");
+            if (!Directory.Exists(workingDirectory))
+            {
+                throw new CommandExitedException("Invalid working directory path. Please check --working-directory is valid.", -1);
 
-            _store = new RocksDBStore(storePath);
+            }
+            else
+            {
+                CleanDirectory(workingDirectory);
+                CloneDirectory(storePath, workingDirectory);
+            }
+
+            var statesPath = Path.Combine(workingDirectory, "states");
+            var stateHashesPath = Path.Combine(workingDirectory, "state_hashes");
+
+            _store = new RocksDBStore(workingDirectory);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
             IKeyValueStore stateHashKeyValueStore = new RocksDBKeyValueStore(stateHashesPath);
             _stateStore = new TrieStateStore(stateKeyValueStore, stateHashKeyValueStore);
@@ -61,7 +89,7 @@ namespace NineChronicles.Snapshot
             var canonicalChainId = _store.GetCanonicalChainId();
             if (canonicalChainId is Guid chainId)
             {
-                var genesisHash = _store.IterateIndexes(chainId,0, 1).First();
+                var genesisHash = _store.IterateIndexes(chainId, 0, 1).First();
                 var tipHash = _store.IterateIndexes(chainId, 0, null).Last();
                 if (!(_store.GetBlockIndex(tipHash) is long tipIndex))
                 {
@@ -72,6 +100,23 @@ namespace NineChronicles.Snapshot
                 var tip = _store.GetBlock<DummyAction>(tipHash);
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 HashDigest<SHA256> snapshotTipHash;
+
+                var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / 86400);
+                var latestBlockWithTx = tip;
+                while(!latestBlockWithTx.Transactions.Any())
+                {
+                    if (latestBlockWithTx.PreviousHash is HashDigest<SHA256> newHash)
+                    {
+                        latestBlockWithTx = _store.GetBlock<DummyAction>(newHash);
+                    }
+                }
+
+                var txTimeSecond = latestBlockWithTx.Transactions
+                    .OrderByDescending(x => x.Timestamp.ToUnixTimeSeconds())
+                    .First()
+                    .Timestamp
+                    .ToUnixTimeSeconds();
+                var latestTxEpoch = (int)(txTimeSecond / 86400);
 
                 do
                 {
@@ -112,14 +157,25 @@ namespace NineChronicles.Snapshot
                     File.Delete(snapshotPath);
                 }
 
-                var blockPerceptPath = Path.Combine(storePath, "blockpercept");
+                var blockPerceptPath = Path.Combine(workingDirectory, "blockpercept");
                 if (Directory.Exists(blockPerceptPath))
                 {
                     Directory.Delete(blockPerceptPath, true);
                 }
 
-                ZipFile.CreateFromDirectory(storePath, snapshotPath);
+                var stagedTxPath = Path.Combine(workingDirectory, "stagedtx");
+                if (Directory.Exists(stagedTxPath))
+                {
+                    Directory.Delete(stagedTxPath, true);
+                }
 
+                // block & tx 짜르기
+                var blockPath = Path.Combine(workingDirectory, "block");
+                var txPath = Path.Combine(workingDirectory, "tx");
+                CleanEpoch(blockPath, metadataBlockEpoch, latestBlockEpoch);
+                CleanEpoch(txPath, metadataTxEpoch, latestTxEpoch);
+
+                ZipFile.CreateFromDirectory(workingDirectory, snapshotPath);
                 if (snapshotTipDigest is null)
                 {
                     throw new CommandExitedException("Tip does not exists.", -1);
@@ -128,6 +184,8 @@ namespace NineChronicles.Snapshot
                 var snapshotTipHeader = snapshotTipDigest.Value.Header;
                 JObject jsonObject = JObject.FromObject(snapshotTipHeader);
                 jsonObject.Add("APV", apv);
+                jsonObject.Add("BlockEpoch", latestBlockEpoch);
+                jsonObject.Add("TxEpoch", latestTxEpoch);
                 var jsonString = JsonConvert.SerializeObject(jsonObject);
 
                 var metadataFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.json";
@@ -197,6 +255,61 @@ namespace NineChronicles.Snapshot
                 }
 
                 _store.IncreaseTxNonce(dest, address, txNonce);
+            }
+        }
+
+        private static void CloneDirectory(string source, string dest)
+        {
+            foreach (var directory in Directory.GetDirectories(source))
+            {
+                string dirName = Path.GetFileName(directory);
+                if (!Directory.Exists(Path.Combine(dest, dirName)))
+                {
+                    Directory.CreateDirectory(Path.Combine(dest, dirName));
+                }
+                CloneDirectory(directory, Path.Combine(dest, dirName));
+            }
+
+            foreach (var file in Directory.GetFiles(source))
+            {
+                File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
+            }
+        }
+
+        private static void CleanDirectory(string path)
+        {
+            System.IO.DirectoryInfo di = new DirectoryInfo(path);
+            foreach (FileInfo file in di.GetFiles())
+            {
+                file.Delete(); 
+            }
+            foreach (DirectoryInfo dir in di.GetDirectories())
+            {
+                dir.Delete(true); 
+            }
+        }
+
+        private static void CleanEpoch(string path, int metadataEpoch, int latestEpoch)
+        {
+            string[] directories = Directory.GetDirectories(
+                path,
+                "epoch*",
+                SearchOption.AllDirectories);
+            try
+            {
+                foreach (string dir in directories)
+                {
+                    string dirName = new DirectoryInfo(dir).Name;
+                    int epoch = Int32.Parse(dirName.Substring(5));
+                    if (epoch < metadataEpoch)
+                    {
+                        Directory.Delete(dir, true);
+                    }
+                }
+            }
+            catch (FormatException)
+            {
+                throw new FormatException("Epoch value is not numeric.");
             }
         }
 

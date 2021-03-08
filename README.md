@@ -13,12 +13,13 @@
 
 ```
 $ dotnet run -- --help
-Usage: Snapshot [--output-directory <String>] [--store-path <String>] [--block-before <Int32>] [--apv <String>] [--help] [--version]
+Usage: Snapshot [--store-path <String>] [--working-directory <String>] [--output-directory <String>] [--block-before <Int32>] [--apv <String>] [--help] [--version]
 
 Snapshot
 
 Options:
   --apv <String>                      (Required)
+  --working-directory <String>        (Required)
   -o, --output-directory <String>     (Default: )
   --store-path <String>               (Default: )
   --block-before <Int32>              (Default: 10)
