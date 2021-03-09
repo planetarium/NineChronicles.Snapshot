@@ -46,20 +46,10 @@ namespace NineChronicles.Snapshot
                 ? Environment.CurrentDirectory
                 : outputDirectory;
 
-            string latestMetadata = Directory.GetFiles(outputDirectory)
-                .Where(x => Path.GetExtension(x) == ".json")
-                .OrderByDescending(x => File.GetLastWriteTime(x))
-                .First();
-
             int metadataBlockEpoch = 0;
             int metadataTxEpoch = 0;
-            using (StreamReader reader = new StreamReader(latestMetadata))
-            {
-                var jsonString = reader.ReadToEnd();
-                var jsonObject = JObject.Parse(jsonString); 
-                metadataBlockEpoch = (int)jsonObject["BlockEpoch"];  
-                metadataTxEpoch = (int)jsonObject["TxEpoch"];             
-            }
+            metadataBlockEpoch = GetPreviousMetadataEpoch(outputDirectory, "BlockEpoch");
+            metadataTxEpoch = GetPreviousMetadataEpoch(outputDirectory, "TxEpoch");
 
             storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
             if (!Directory.Exists(storePath))
@@ -101,21 +91,9 @@ namespace NineChronicles.Snapshot
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 HashDigest<SHA256> snapshotTipHash;
 
-                var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / 86400);
-                var latestBlockWithTx = tip;
-                while(!latestBlockWithTx.Transactions.Any())
-                {
-                    if (latestBlockWithTx.PreviousHash is HashDigest<SHA256> newHash)
-                    {
-                        latestBlockWithTx = _store.GetBlock<DummyAction>(newHash);
-                    }
-                }
-
-                var txTimeSecond = latestBlockWithTx.Transactions
-                    .OrderByDescending(x => x.Timestamp.ToUnixTimeSeconds())
-                    .First()
-                    .Timestamp
-                    .ToUnixTimeSeconds();
+                var latestBlockWithTx = GetLastestBlockWithTransaction<DummyAction>(tip, _store);
+                var latestBlockEpoch = (int)(latestBlockWithTx.Timestamp.ToUnixTimeSeconds() / 86400);
+                var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
                 var latestTxEpoch = (int)(txTimeSecond / 86400);
 
                 do
@@ -258,6 +236,42 @@ namespace NineChronicles.Snapshot
             }
         }
 
+        private static int GetPreviousMetadataEpoch(
+            string outputDirectory,
+            string epochType)
+        {
+            try
+            {
+                string previousMetadata = Directory.GetFiles(outputDirectory)
+                    .Where(x => Path.GetExtension(x) == ".json")
+                    .OrderByDescending(x => File.GetLastWriteTime(x))
+                    .First();
+                using (StreamReader reader = new StreamReader(previousMetadata))
+                {
+                    var jsonString = reader.ReadToEnd();
+                    var jsonObject = JObject.Parse(jsonString); 
+                    return (int)jsonObject[epochType];            
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return 0;
+            }
+        }
+        private static Block<T> GetLastestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
+            where T : DummyAction, new()
+        {
+            var block = tip;
+            while(!block.Transactions.Any())
+            {
+                if (block.PreviousHash is HashDigest<SHA256> newHash)
+                {
+                    block = store.GetBlock<T>(newHash);
+                }
+            }
+            return block;
+        }
         private static void CloneDirectory(string source, string dest)
         {
             foreach (var directory in Directory.GetDirectories(source))
