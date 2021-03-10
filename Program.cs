@@ -91,8 +91,8 @@ namespace NineChronicles.Snapshot
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 HashDigest<SHA256> snapshotTipHash;
 
+                var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / 86400);
                 var latestBlockWithTx = GetLastestBlockWithTransaction<DummyAction>(tip, _store);
-                var latestBlockEpoch = (int)(latestBlockWithTx.Timestamp.ToUnixTimeSeconds() / 86400);
                 var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
                 var latestTxEpoch = (int)(txTimeSecond / 86400);
 
@@ -128,7 +128,7 @@ namespace NineChronicles.Snapshot
 
                 var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
                 var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
-                var snapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.zip";
+                var snapshotFilename = $"{genesisHashHex}-snapshot-{latestBlockEpoch}-{latestTxEpoch}.zip";
                 var snapshotPath = Path.Combine(outputDirectory, snapshotFilename);
                 if (File.Exists(snapshotPath))
                 {
@@ -166,7 +166,7 @@ namespace NineChronicles.Snapshot
                 jsonObject.Add("TxEpoch", latestTxEpoch);
                 var jsonString = JsonConvert.SerializeObject(jsonObject);
 
-                var metadataFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.json";
+                var metadataFilename = $"{genesisHashHex}-snapshot-{latestBlockEpoch}-{latestTxEpoch}.json";
                 var metadataPath = Path.Combine(outputDirectory, metadataFilename);
                 if (File.Exists(metadataPath))
                 {
