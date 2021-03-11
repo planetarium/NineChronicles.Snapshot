@@ -128,7 +128,7 @@ namespace NineChronicles.Snapshot
 
                 var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
                 var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
-                var snapshotFilename = $"{genesisHashHex}-snapshot-{latestBlockEpoch}-{latestTxEpoch}.zip";
+                var snapshotFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.zip";
                 var snapshotPath = Path.Combine(outputDirectory, snapshotFilename);
                 if (File.Exists(snapshotPath))
                 {
@@ -161,11 +161,13 @@ namespace NineChronicles.Snapshot
                 var snapshotTipHeader = snapshotTipDigest.Value.Header;
                 JObject jsonObject = JObject.FromObject(snapshotTipHeader);
                 jsonObject.Add("APV", apv);
+                jsonObject.Add("PreviousBlockEpoch", metadataBlockEpoch);
+                jsonObject.Add("PreviousTxEpoch", metadataTxEpoch);
                 jsonObject.Add("BlockEpoch", latestBlockEpoch);
                 jsonObject.Add("TxEpoch", latestTxEpoch);
                 var jsonString = JsonConvert.SerializeObject(jsonObject);
 
-                var metadataFilename = $"{genesisHashHex}-snapshot-{latestBlockEpoch}-{latestTxEpoch}.json";
+                var metadataFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.json";
                 var metadataPath = Path.Combine(outputDirectory, metadataFilename);
                 if (File.Exists(metadataPath))
                 {
