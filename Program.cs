@@ -147,7 +147,6 @@ namespace NineChronicles.Snapshot
                     Directory.Delete(stagedTxPath, true);
                 }
 
-                // block & tx 짜르기
                 var blockPath = Path.Combine(workingDirectory, "block");
                 var txPath = Path.Combine(workingDirectory, "tx");
                 CleanEpoch(blockPath, metadataBlockEpoch, latestBlockEpoch);
@@ -259,6 +258,7 @@ namespace NineChronicles.Snapshot
                 return 0;
             }
         }
+
         private static Block<T> GetLastestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
             where T : DummyAction, new()
         {
@@ -272,6 +272,7 @@ namespace NineChronicles.Snapshot
             }
             return block;
         }
+
         private static void CloneDirectory(string source, string dest)
         {
             foreach (var directory in Directory.GetDirectories(source))
