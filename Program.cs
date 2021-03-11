@@ -45,10 +45,14 @@ namespace NineChronicles.Snapshot
                 ? Environment.CurrentDirectory
                 : outputDirectory;
 
-            int metadataBlockEpoch = 0;
-            int metadataTxEpoch = 0;
-            metadataBlockEpoch = GetPreviousMetadataEpoch(outputDirectory, "BlockEpoch");
-            metadataTxEpoch = GetPreviousMetadataEpoch(outputDirectory, "TxEpoch");
+            int currentMetadataBlockEpoch = 0;
+            int currentMetadataTxEpoch = 0;
+            int previousMetadataBlockEpoch = 0;
+            int previousMetadataTxEpoch = 0;
+            currentMetadataBlockEpoch = GetMetaDataEpoch(outputDirectory, "BlockEpoch");
+            currentMetadataTxEpoch = GetMetaDataEpoch(outputDirectory, "TxEpoch");
+            previousMetadataBlockEpoch = GetMetaDataEpoch(outputDirectory, "PreviousBlockEpoch");
+            previousMetadataTxEpoch = GetMetaDataEpoch(outputDirectory, "PreviousTxEpoch");
 
             storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
             if (!Directory.Exists(storePath))
@@ -144,8 +148,8 @@ namespace NineChronicles.Snapshot
 
                 var blockPath = Path.Combine(workingDirectory, "block");
                 var txPath = Path.Combine(workingDirectory, "tx");
-                CleanEpoch(blockPath, metadataBlockEpoch, latestBlockEpoch);
-                CleanEpoch(txPath, metadataTxEpoch, latestTxEpoch);
+                CleanEpoch(blockPath, currentMetadataBlockEpoch, latestBlockEpoch);
+                CleanEpoch(txPath, currentMetadataTxEpoch, latestTxEpoch);
 
                 ZipFile.CreateFromDirectory(workingDirectory, snapshotPath);
                 if (snapshotTipDigest is null)
@@ -156,8 +160,18 @@ namespace NineChronicles.Snapshot
                 var snapshotTipHeader = snapshotTipDigest.Value.Header;
                 JObject jsonObject = JObject.FromObject(snapshotTipHeader);
                 jsonObject.Add("APV", apv);
-                jsonObject.Add("PreviousBlockEpoch", metadataBlockEpoch);
-                jsonObject.Add("PreviousTxEpoch", metadataTxEpoch);
+                jsonObject = AddPreviousEpoch(
+                    jsonObject,
+                    currentMetadataBlockEpoch,
+                    latestBlockEpoch,
+                    previousMetadataBlockEpoch,
+                    "PreviousBlockEpoch");
+                jsonObject = AddPreviousEpoch(
+                    jsonObject,
+                    currentMetadataTxEpoch,
+                    latestTxEpoch,
+                    previousMetadataTxEpoch,
+                    "PreviousTxEpoch");
                 jsonObject.Add("BlockEpoch", latestBlockEpoch);
                 jsonObject.Add("TxEpoch", latestTxEpoch);
                 var jsonString = JsonConvert.SerializeObject(jsonObject);
@@ -233,7 +247,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static int GetPreviousMetadataEpoch(
+        private static int GetMetaDataEpoch(
             string outputDirectory,
             string epochType)
         {
@@ -289,7 +303,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static void CleanEpoch(string path, int metadataEpoch, int latestEpoch)
+        private static void CleanEpoch(string path, int currentMetadataEpoch, int latestEpoch)
         {
             string[] directories = Directory.GetDirectories(
                 path,
@@ -301,7 +315,7 @@ namespace NineChronicles.Snapshot
                 {
                     string dirName = new DirectoryInfo(dir).Name;
                     int epoch = Int32.Parse(dirName.Substring(5));
-                    if (epoch < metadataEpoch)
+                    if (epoch < currentMetadataEpoch)
                     {
                         Directory.Delete(dir, true);
                     }
@@ -311,6 +325,24 @@ namespace NineChronicles.Snapshot
             {
                 throw new FormatException("Epoch value is not numeric.");
             }
+        }
+        private static JObject AddPreviousEpoch(
+            JObject jsonObject,
+            int currentMetadataEpoch,
+            int latestEpoch,
+            int previousMetadataEpoch,
+            string epochName)
+        {
+                if (currentMetadataEpoch == latestEpoch)
+                {
+                    jsonObject.Add(epochName, previousMetadataEpoch);
+                }
+                else
+                {
+                    jsonObject.Add(epochName, currentMetadataEpoch);
+                }
+
+            return jsonObject;
         }
 
         private class DummyAction : IAction
