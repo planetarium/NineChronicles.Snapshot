@@ -31,7 +31,6 @@ namespace NineChronicles.Snapshot
         [Command]
         public void Snapshot(
             string apv,
-            string workingDirectory,
             [Option('o')]
             string outputDirectory = null,
             string storePath = null,
@@ -57,17 +56,13 @@ namespace NineChronicles.Snapshot
                 throw new CommandExitedException("Invalid store path. Please check --store-path is valid.", -1);
             }
 
-            if (!Directory.Exists(workingDirectory))
+            string workingDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
+            if (Directory.Exists(workingDirectory))
             {
-                throw new CommandExitedException("Invalid working directory path. Please check --working-directory is valid.", -1);
-
-            }
-            else
-            {
-                CleanDirectory(workingDirectory);
-                CloneDirectory(storePath, workingDirectory);
+                Directory.Delete(workingDirectory, true);
             }
 
+            CloneDirectory(storePath, workingDirectory);
             var statesPath = Path.Combine(workingDirectory, "states");
             var stateHashesPath = Path.Combine(workingDirectory, "state_hashes");
 
@@ -175,6 +170,7 @@ namespace NineChronicles.Snapshot
                 }
 
                 File.WriteAllText(metadataPath, jsonString);
+                Directory.Delete(workingDirectory, true);
             }
             else
             {
@@ -290,19 +286,6 @@ namespace NineChronicles.Snapshot
             foreach (var file in Directory.GetFiles(source))
             {
                 File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
-            }
-        }
-
-        private static void CleanDirectory(string path)
-        {
-            System.IO.DirectoryInfo di = new DirectoryInfo(path);
-            foreach (FileInfo file in di.GetFiles())
-            {
-                file.Delete(); 
-            }
-            foreach (DirectoryInfo dir in di.GetDirectories())
-            {
-                dir.Delete(true); 
             }
         }
 
