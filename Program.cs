@@ -160,17 +160,23 @@ namespace NineChronicles.Snapshot
                 var snapshotTipHeader = snapshotTipDigest.Value.Header;
                 JObject jsonObject = JObject.FromObject(snapshotTipHeader);
                 jsonObject.Add("APV", apv);
-                jsonObject = AddPreviousEpoch(
+                jsonObject = AddPreviousBlockEpoch(
                     jsonObject,
                     currentMetadataBlockEpoch,
-                    latestBlockEpoch,
-                    previousMetadataBlockEpoch,
-                    "PreviousBlockEpoch");
-                jsonObject = AddPreviousEpoch(
-                    jsonObject,
                     currentMetadataTxEpoch,
-                    latestTxEpoch,
+                    previousMetadataBlockEpoch,
                     previousMetadataTxEpoch,
+                    latestBlockEpoch,
+                    latestTxEpoch,
+                    "PreviousBlockEpoch");
+                jsonObject = AddPreviousTxEpoch(
+                    jsonObject,
+                    currentMetadataBlockEpoch,
+                    currentMetadataTxEpoch,
+                    previousMetadataBlockEpoch,
+                    previousMetadataTxEpoch,
+                    latestBlockEpoch,
+                    latestTxEpoch,
                     "PreviousTxEpoch");
                 jsonObject.Add("BlockEpoch", latestBlockEpoch);
                 jsonObject.Add("TxEpoch", latestTxEpoch);
@@ -326,20 +332,60 @@ namespace NineChronicles.Snapshot
                 throw new FormatException("Epoch value is not numeric.");
             }
         }
-        private static JObject AddPreviousEpoch(
+
+        private static JObject AddPreviousTxEpoch(
             JObject jsonObject,
-            int currentMetadataEpoch,
-            int latestEpoch,
-            int previousMetadataEpoch,
-            string epochName)
+            int currentMetadataBlockEpoch,
+            int currentMetadataTxEpoch,
+            int previousMetadataBlockEpoch,
+            int previousMetadataTxEpoch,
+            int latestBlockEpoch,
+            int latestTxEpoch,
+            string txEpochName)
         {
-                if (currentMetadataEpoch == latestEpoch)
+                if (currentMetadataTxEpoch == latestTxEpoch)
                 {
-                    jsonObject.Add(epochName, previousMetadataEpoch);
+                    if (currentMetadataBlockEpoch != latestBlockEpoch)
+                    {
+                        jsonObject.Add(txEpochName, currentMetadataTxEpoch);
+                    }
+                    else
+                    {
+                        jsonObject.Add(txEpochName, previousMetadataTxEpoch);
+                    }
                 }
                 else
                 {
-                    jsonObject.Add(epochName, currentMetadataEpoch);
+                    jsonObject.Add(txEpochName, currentMetadataTxEpoch);
+                }
+
+            return jsonObject;
+        }
+
+        private static JObject AddPreviousBlockEpoch(
+            JObject jsonObject,
+            int currentMetadataBlockEpoch,
+            int currentMetadataTxEpoch,
+            int previousMetadataBlockEpoch,
+            int previousMetadataTxEpoch,
+            int latestBlockEpoch,
+            int latestTxEpoch,
+            string blockEpochName)
+        {
+                if (currentMetadataBlockEpoch == latestBlockEpoch)
+                {
+                    if (currentMetadataTxEpoch != latestTxEpoch)
+                    {
+                        jsonObject.Add(blockEpochName, currentMetadataBlockEpoch);
+                    }
+                    else
+                    {
+                        jsonObject.Add(blockEpochName, previousMetadataBlockEpoch);
+                    }
+                }
+                else
+                {
+                    jsonObject.Add(blockEpochName, currentMetadataBlockEpoch);
                 }
 
             return jsonObject;
