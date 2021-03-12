@@ -45,14 +45,10 @@ namespace NineChronicles.Snapshot
                 ? Environment.CurrentDirectory
                 : outputDirectory;
 
-            int currentMetadataBlockEpoch = 0;
-            int currentMetadataTxEpoch = 0;
-            int previousMetadataBlockEpoch = 0;
-            int previousMetadataTxEpoch = 0;
-            currentMetadataBlockEpoch = GetMetaDataEpoch(outputDirectory, "BlockEpoch");
-            currentMetadataTxEpoch = GetMetaDataEpoch(outputDirectory, "TxEpoch");
-            previousMetadataBlockEpoch = GetMetaDataEpoch(outputDirectory, "PreviousBlockEpoch");
-            previousMetadataTxEpoch = GetMetaDataEpoch(outputDirectory, "PreviousTxEpoch");
+            int currentMetadataBlockEpoch = GetMetaDataEpoch(outputDirectory, "BlockEpoch");
+            int currentMetadataTxEpoch = GetMetaDataEpoch(outputDirectory, "TxEpoch");
+            int previousMetadataBlockEpoch = GetMetaDataEpoch(outputDirectory, "PreviousBlockEpoch");
+            int previousMetadataTxEpoch = GetMetaDataEpoch(outputDirectory, "PreviousTxEpoch");
 
             storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
             if (!Directory.Exists(storePath))
@@ -90,10 +86,13 @@ namespace NineChronicles.Snapshot
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 HashDigest<SHA256> snapshotTipHash;
 
-                var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / 86400);
+                // If store changed epoch unit seconds, this will be changed too
+                const int blockEpochUnitSeconds = 86400;
+                const int txEpochUnitSeconds = 86400;
+                var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
                 var latestBlockWithTx = GetLastestBlockWithTransaction<DummyAction>(tip, _store);
                 var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
-                var latestTxEpoch = (int)(txTimeSecond / 86400);
+                var latestTxEpoch = (int)(txTimeSecond / txEpochUnitSeconds );
 
                 do
                 {
@@ -263,16 +262,12 @@ namespace NineChronicles.Snapshot
                     .Where(x => Path.GetExtension(x) == ".json")
                     .OrderByDescending(x => File.GetLastWriteTime(x))
                     .First();
-                using (StreamReader reader = new StreamReader(previousMetadata))
-                {
-                    var jsonString = reader.ReadToEnd();
-                    var jsonObject = JObject.Parse(jsonString); 
-                    return (int)jsonObject[epochType];            
-                }
+                var jsonObject = JObject.Parse(File.ReadAllText(previousMetadata)); 
+                return (int)jsonObject[epochType];
             }
-            catch (Exception e)
+            catch (InvalidOperationException e)
             {
-                Console.WriteLine(e.Message);
+                Console.Error.WriteLine(e.Message);
                 return 0;
             }
         }
