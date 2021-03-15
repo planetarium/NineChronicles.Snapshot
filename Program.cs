@@ -316,7 +316,7 @@ namespace NineChronicles.Snapshot
                 {
                     string dirName = new DirectoryInfo(dir).Name;
                     int epoch = Int32.Parse(dirName.Substring(5));
-                    if (epoch < currentMetadataEpoch)
+                    if (epoch < currentMetadataEpoch - 1)
                     {
                         Directory.Delete(dir, true);
                     }
