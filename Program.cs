@@ -56,17 +56,10 @@ namespace NineChronicles.Snapshot
                 throw new CommandExitedException("Invalid store path. Please check --store-path is valid.", -1);
             }
 
-            string workingDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
-            if (Directory.Exists(workingDirectory))
-            {
-                Directory.Delete(workingDirectory, true);
-            }
+            var statesPath = Path.Combine(storePath, "states");
+            var stateHashesPath = Path.Combine(storePath, "state_hashes");
 
-            CloneDirectory(storePath, workingDirectory);
-            var statesPath = Path.Combine(workingDirectory, "states");
-            var stateHashesPath = Path.Combine(workingDirectory, "state_hashes");
-
-            _store = new RocksDBStore(workingDirectory);
+            _store = new RocksDBStore(storePath);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
             IKeyValueStore stateHashKeyValueStore = new RocksDBKeyValueStore(stateHashesPath);
             _stateStore = new TrieStateStore(stateKeyValueStore, stateHashKeyValueStore);
@@ -131,17 +124,25 @@ namespace NineChronicles.Snapshot
                     File.Delete(snapshotPath);
                 }
 
-                var blockPerceptPath = Path.Combine(workingDirectory, "blockpercept");
+                var blockPerceptPath = Path.Combine(storePath, "blockpercept");
                 if (Directory.Exists(blockPerceptPath))
                 {
                     Directory.Delete(blockPerceptPath, true);
                 }
 
-                var stagedTxPath = Path.Combine(workingDirectory, "stagedtx");
+                var stagedTxPath = Path.Combine(storePath, "stagedtx");
                 if (Directory.Exists(stagedTxPath))
                 {
                     Directory.Delete(stagedTxPath, true);
                 }
+
+                string workingDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
+                if (Directory.Exists(workingDirectory))
+                {
+                    Directory.Delete(workingDirectory, true);
+                }
+
+                CloneDirectory(storePath, workingDirectory);
 
                 var blockPath = Path.Combine(workingDirectory, "block");
                 var txPath = Path.Combine(workingDirectory, "tx");
