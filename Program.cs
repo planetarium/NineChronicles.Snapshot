@@ -86,14 +86,6 @@ namespace NineChronicles.Snapshot
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 HashDigest<SHA256> snapshotTipHash;
 
-                // If store changed epoch unit seconds, this will be changed too
-                const int blockEpochUnitSeconds = 86400;
-                const int txEpochUnitSeconds = 86400;
-                var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
-                var latestBlockWithTx = GetLastestBlockWithTransaction<DummyAction>(tip, _store);
-                var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
-                var latestTxEpoch = (int)(txTimeSecond / txEpochUnitSeconds );
-
                 do
                 {
                     snapshotTipIndex++;
@@ -121,11 +113,17 @@ namespace NineChronicles.Snapshot
 
                 _stateStore.PruneStates(new []{ snapshotTipHash }.ToImmutableHashSet());
 
+                // If store changed epoch unit seconds, this will be changed too
+                const int blockEpochUnitSeconds = 86400;
+                const int txEpochUnitSeconds = 86400;
+                var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
+                var latestBlockWithTx = GetLastestBlockWithTransaction<DummyAction>(tip, _store);
+                var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
+                var latestTxEpoch = (int)(txTimeSecond / txEpochUnitSeconds );
+
                 _store.Dispose();
                 _stateStore.Dispose();
 
-                var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
-                var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
                 var snapshotFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.zip";
                 var snapshotPath = Path.Combine(outputDirectory, snapshotFilename);
                 if (File.Exists(snapshotPath))
