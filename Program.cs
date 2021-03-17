@@ -254,7 +254,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static int GetMetaDataEpoch(
+        private int GetMetaDataEpoch(
             string outputDirectory,
             string epochType)
         {
@@ -274,7 +274,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static Block<T> GetLatestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
+        private Block<T> GetLatestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
             where T : DummyAction, new()
         {
             var block = tip;
@@ -288,7 +288,7 @@ namespace NineChronicles.Snapshot
             return block;
         }
 
-        private static void CloneDirectory(string source, string dest)
+        private void CloneDirectory(string source, string dest)
         {
             foreach (var directory in Directory.GetDirectories(source))
             {
@@ -306,7 +306,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static void CleanEpoch(string path, int currentMetadataEpoch)
+        private void CleanEpoch(string path, int currentMetadataEpoch)
         {
             string[] directories = Directory.GetDirectories(
                 path,
@@ -330,7 +330,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static JObject AddPreviousTxEpoch(JObject jsonObject,
+        private JObject AddPreviousTxEpoch(JObject jsonObject,
             int currentMetadataBlockEpoch,
             int currentMetadataTxEpoch,
             int previousMetadataTxEpoch,
@@ -357,7 +357,7 @@ namespace NineChronicles.Snapshot
                 return jsonObject;
         }
 
-        private static JObject AddPreviousBlockEpoch(JObject jsonObject,
+        private JObject AddPreviousBlockEpoch(JObject jsonObject,
             int currentMetadataBlockEpoch,
             int currentMetadataTxEpoch,
             int previousMetadataBlockEpoch,
