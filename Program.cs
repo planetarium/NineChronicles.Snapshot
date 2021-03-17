@@ -146,8 +146,8 @@ namespace NineChronicles.Snapshot
 
                 var blockPath = Path.Combine(workingDirectory, "block");
                 var txPath = Path.Combine(workingDirectory, "tx");
-                CleanEpoch(blockPath, currentMetadataBlockEpoch, latestBlockEpoch);
-                CleanEpoch(txPath, currentMetadataTxEpoch, latestTxEpoch);
+                CleanEpoch(blockPath, currentMetadataBlockEpoch);
+                CleanEpoch(txPath, currentMetadataTxEpoch);
 
                 ZipFile.CreateFromDirectory(workingDirectory, snapshotPath);
                 if (snapshotTipDigest is null)
@@ -163,7 +163,6 @@ namespace NineChronicles.Snapshot
                     currentMetadataBlockEpoch,
                     currentMetadataTxEpoch,
                     previousMetadataBlockEpoch,
-                    previousMetadataTxEpoch,
                     latestBlockEpoch,
                     latestTxEpoch,
                     "PreviousBlockEpoch");
@@ -171,7 +170,6 @@ namespace NineChronicles.Snapshot
                     jsonObject,
                     currentMetadataBlockEpoch,
                     currentMetadataTxEpoch,
-                    previousMetadataBlockEpoch,
                     previousMetadataTxEpoch,
                     latestBlockEpoch,
                     latestTxEpoch,
@@ -303,7 +301,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static void CleanEpoch(string path, int currentMetadataEpoch, int latestEpoch)
+        private static void CleanEpoch(string path, int currentMetadataEpoch)
         {
             string[] directories = Directory.GetDirectories(
                 path,
@@ -315,7 +313,7 @@ namespace NineChronicles.Snapshot
                 {
                     string dirName = new DirectoryInfo(dir).Name;
                     int epoch = Int32.Parse(dirName.Substring(5));
-                    if (epoch < currentMetadataEpoch - 1)
+                    if (epoch <= currentMetadataEpoch)
                     {
                         Directory.Delete(dir, true);
                     }
@@ -327,11 +325,9 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static JObject AddPreviousTxEpoch(
-            JObject jsonObject,
+        private static JObject AddPreviousTxEpoch(JObject jsonObject,
             int currentMetadataBlockEpoch,
             int currentMetadataTxEpoch,
-            int previousMetadataBlockEpoch,
             int previousMetadataTxEpoch,
             int latestBlockEpoch,
             int latestTxEpoch,
@@ -356,12 +352,10 @@ namespace NineChronicles.Snapshot
                 return jsonObject;
         }
 
-        private static JObject AddPreviousBlockEpoch(
-            JObject jsonObject,
+        private static JObject AddPreviousBlockEpoch(JObject jsonObject,
             int currentMetadataBlockEpoch,
             int currentMetadataTxEpoch,
             int previousMetadataBlockEpoch,
-            int previousMetadataTxEpoch,
             int latestBlockEpoch,
             int latestTxEpoch,
             string blockEpochName)
