@@ -118,7 +118,6 @@ namespace NineChronicles.Snapshot
 
             _stateStore.PruneStates(new[] {snapshotTipHash}.ToImmutableHashSet());
 
-
             var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
             var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
             var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
@@ -127,7 +126,9 @@ namespace NineChronicles.Snapshot
             _store.Dispose();
             _stateStore.Dispose();
 
-            var snapshotFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.zip";
+            var baseFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}";
+
+            var snapshotFilename = $"{baseFilename}.zip";
             var snapshotPath = Path.Combine(outputDirectory, snapshotFilename);
             string workingDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
             CleanStore(snapshotPath, storePath, workingDirectory);
@@ -144,38 +145,58 @@ namespace NineChronicles.Snapshot
                 throw new CommandExitedException("Tip does not exists.", -1);
             }
 
-            var snapshotTipHeader = snapshotTipDigest.Value.Header;
-            JObject jsonObject = JObject.FromObject(snapshotTipHeader);
-            jsonObject.Add("APV", apv);
-            jsonObject = AddPreviousBlockEpoch(
-                jsonObject,
+            string stringfyMetadata = GetMetadata(
+                snapshotTipDigest.Value,
+                apv,
                 currentMetadataBlockEpoch,
                 currentMetadataTxEpoch,
                 previousMetadataBlockEpoch,
-                latestBlockEpoch,
-                latestTxEpoch,
-                "PreviousBlockEpoch");
-            jsonObject = AddPreviousTxEpoch(
-                jsonObject,
-                currentMetadataBlockEpoch,
-                currentMetadataTxEpoch,
                 previousMetadataTxEpoch,
                 latestBlockEpoch,
-                latestTxEpoch,
-                "PreviousTxEpoch");
-            jsonObject.Add("BlockEpoch", latestBlockEpoch);
-            jsonObject.Add("TxEpoch", latestTxEpoch);
-            var jsonString = JsonConvert.SerializeObject(jsonObject);
-
-            var metadataFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.json";
+                latestTxEpoch);
+            var metadataFilename = $"{baseFilename}.json";
             var metadataPath = Path.Combine(outputDirectory, metadataFilename);
             if (File.Exists(metadataPath))
             {
                 File.Delete(metadataPath);
             }
 
-            File.WriteAllText(metadataPath, jsonString);
+            File.WriteAllText(metadataPath, stringfyMetadata);
             Directory.Delete(workingDirectory, true);
+        }
+
+        private string GetMetadata(
+            BlockDigest snapshotTipDigest,
+            string apv,
+            int currentMetadataBlockEpoch,
+            int currentMetadataTxEpoch,
+            int previousMetadataBlockEpoch,
+            int previousMetadataTxEpoch,
+            int latestBlockEpoch,
+            int latestTxEpoch)
+        {
+             var snapshotTipHeader = snapshotTipDigest.Header;
+             JObject jsonObject = JObject.FromObject(snapshotTipHeader);
+             jsonObject.Add("APV", apv);
+             jsonObject = AddPreviousBlockEpoch(
+                 jsonObject,
+                 currentMetadataBlockEpoch,
+                 currentMetadataTxEpoch,
+                 previousMetadataBlockEpoch,
+                 latestBlockEpoch,
+                 latestTxEpoch,
+                 "PreviousBlockEpoch");
+             jsonObject = AddPreviousTxEpoch(
+                 jsonObject,
+                 currentMetadataBlockEpoch,
+                 currentMetadataTxEpoch,
+                 previousMetadataTxEpoch,
+                 latestBlockEpoch,
+                 latestTxEpoch,
+                 "PreviousTxEpoch");
+             jsonObject.Add("BlockEpoch", latestBlockEpoch);
+             jsonObject.Add("TxEpoch", latestTxEpoch);
+             return JsonConvert.SerializeObject(jsonObject);
         }
 
         private void CleanStore(string snapshotPath, string storePath, string workingDirectory)
