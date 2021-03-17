@@ -36,6 +36,10 @@ namespace NineChronicles.Snapshot
             string storePath = null,
             int blockBefore = 10)
         {
+            // If store changed epoch unit seconds, this will be changed too
+            const int blockEpochUnitSeconds = 86400;
+            const int txEpochUnitSeconds = 86400;
+            
             string defaultStorePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "planetarium",
@@ -59,7 +63,10 @@ namespace NineChronicles.Snapshot
             var statesPath = Path.Combine(storePath, "states");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
 
-            _store = new RocksDBStore(storePath);
+            _store = new RocksDBStore(
+                storePath,
+                blockEpochUnitSeconds: blockEpochUnitSeconds,
+                txEpochUnitSeconds: txEpochUnitSeconds);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
             IKeyValueStore stateHashKeyValueStore = new RocksDBKeyValueStore(stateHashesPath);
             _stateStore = new TrieStateStore(stateKeyValueStore, stateHashKeyValueStore);
@@ -106,9 +113,7 @@ namespace NineChronicles.Snapshot
 
                 _stateStore.PruneStates(new []{ snapshotTipHash }.ToImmutableHashSet());
 
-                // If store changed epoch unit seconds, this will be changed too
-                const int blockEpochUnitSeconds = 86400;
-                const int txEpochUnitSeconds = 86400;
+
                 var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
                 var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
                 var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
