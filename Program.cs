@@ -129,29 +129,8 @@ namespace NineChronicles.Snapshot
 
             var snapshotFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.zip";
             var snapshotPath = Path.Combine(outputDirectory, snapshotFilename);
-            if (File.Exists(snapshotPath))
-            {
-                File.Delete(snapshotPath);
-            }
-
-            var blockPerceptPath = Path.Combine(storePath, "blockpercept");
-            if (Directory.Exists(blockPerceptPath))
-            {
-                Directory.Delete(blockPerceptPath, true);
-            }
-
-            var stagedTxPath = Path.Combine(storePath, "stagedtx");
-            if (Directory.Exists(stagedTxPath))
-            {
-                Directory.Delete(stagedTxPath, true);
-            }
-
             string workingDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
-            if (Directory.Exists(workingDirectory))
-            {
-                Directory.Delete(workingDirectory, true);
-            }
-
+            CleanStore(snapshotPath, storePath, workingDirectory);
             CloneDirectory(storePath, workingDirectory);
 
             var blockPath = Path.Combine(workingDirectory, "block");
@@ -197,6 +176,31 @@ namespace NineChronicles.Snapshot
 
             File.WriteAllText(metadataPath, jsonString);
             Directory.Delete(workingDirectory, true);
+        }
+
+        private void CleanStore(string snapshotPath, string storePath, string workingDirectory)
+        {
+             if (File.Exists(snapshotPath))
+             {
+                 File.Delete(snapshotPath);
+             }
+ 
+             var blockPerceptPath = Path.Combine(storePath, "blockpercept");
+             if (Directory.Exists(blockPerceptPath))
+             {
+                 Directory.Delete(blockPerceptPath, true);
+             }
+ 
+             var stagedTxPath = Path.Combine(storePath, "stagedtx");
+             if (Directory.Exists(stagedTxPath))
+             {
+                 Directory.Delete(stagedTxPath, true);
+             }
+ 
+             if (Directory.Exists(workingDirectory))
+             {
+                 Directory.Delete(workingDirectory, true);
+             }           
         }
 
         private void Fork(
