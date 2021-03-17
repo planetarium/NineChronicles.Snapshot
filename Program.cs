@@ -72,131 +72,131 @@ namespace NineChronicles.Snapshot
             _stateStore = new TrieStateStore(stateKeyValueStore, stateHashKeyValueStore);
 
             var canonicalChainId = _store.GetCanonicalChainId();
-            if (canonicalChainId is Guid chainId)
-            {
-                var genesisHash = _store.IterateIndexes(chainId, 0, 1).First();
-                var tipHash = _store.IterateIndexes(chainId, 0, null).Last();
-                if (!(_store.GetBlockIndex(tipHash) is long tipIndex))
-                {
-                    throw new CommandExitedException(
-                        $"The index of {tipHash} doesn't exist.",
-                        -1);
-                }
-                var tip = _store.GetBlock<DummyAction>(tipHash);
-                var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
-                HashDigest<SHA256> snapshotTipHash;
-
-                do
-                {
-                    snapshotTipIndex++;
-
-                    if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is HashDigest<SHA256> hash))
-                    {
-                        throw new CommandExitedException(
-                            $"The index {snapshotTipIndex} doesn't exist on ${chainId}.",
-                            -1);
-                    }
-                    snapshotTipHash = hash;
-                } while (!_stateStore.ContainsBlockStates(snapshotTipHash));
-
-                var forkedId = Guid.NewGuid();
-
-                Fork(chainId, forkedId, genesisHash, snapshotTipHash, tip);
-
-                _store.SetCanonicalChainId(forkedId);
-                foreach (var id in _store.ListChainIds().Where(id => !id.Equals(forkedId)))
-                {
-                    _store.DeleteChainId(id);
-                }
-
-                var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
-
-                _stateStore.PruneStates(new []{ snapshotTipHash }.ToImmutableHashSet());
-
-
-                var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
-                var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
-                var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
-                var latestTxEpoch = (int)(txTimeSecond / txEpochUnitSeconds );
-
-                _store.Dispose();
-                _stateStore.Dispose();
-
-                var snapshotFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.zip";
-                var snapshotPath = Path.Combine(outputDirectory, snapshotFilename);
-                if (File.Exists(snapshotPath))
-                {
-                    File.Delete(snapshotPath);
-                }
-
-                var blockPerceptPath = Path.Combine(storePath, "blockpercept");
-                if (Directory.Exists(blockPerceptPath))
-                {
-                    Directory.Delete(blockPerceptPath, true);
-                }
-
-                var stagedTxPath = Path.Combine(storePath, "stagedtx");
-                if (Directory.Exists(stagedTxPath))
-                {
-                    Directory.Delete(stagedTxPath, true);
-                }
-
-                string workingDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
-                if (Directory.Exists(workingDirectory))
-                {
-                    Directory.Delete(workingDirectory, true);
-                }
-
-                CloneDirectory(storePath, workingDirectory);
-
-                var blockPath = Path.Combine(workingDirectory, "block");
-                var txPath = Path.Combine(workingDirectory, "tx");
-                CleanEpoch(blockPath, currentMetadataBlockEpoch);
-                CleanEpoch(txPath, currentMetadataTxEpoch);
-
-                ZipFile.CreateFromDirectory(workingDirectory, snapshotPath);
-                if (snapshotTipDigest is null)
-                {
-                    throw new CommandExitedException("Tip does not exists.", -1);
-                }
-
-                var snapshotTipHeader = snapshotTipDigest.Value.Header;
-                JObject jsonObject = JObject.FromObject(snapshotTipHeader);
-                jsonObject.Add("APV", apv);
-                jsonObject = AddPreviousBlockEpoch(
-                    jsonObject,
-                    currentMetadataBlockEpoch,
-                    currentMetadataTxEpoch,
-                    previousMetadataBlockEpoch,
-                    latestBlockEpoch,
-                    latestTxEpoch,
-                    "PreviousBlockEpoch");
-                jsonObject = AddPreviousTxEpoch(
-                    jsonObject,
-                    currentMetadataBlockEpoch,
-                    currentMetadataTxEpoch,
-                    previousMetadataTxEpoch,
-                    latestBlockEpoch,
-                    latestTxEpoch,
-                    "PreviousTxEpoch");
-                jsonObject.Add("BlockEpoch", latestBlockEpoch);
-                jsonObject.Add("TxEpoch", latestTxEpoch);
-                var jsonString = JsonConvert.SerializeObject(jsonObject);
-
-                var metadataFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.json";
-                var metadataPath = Path.Combine(outputDirectory, metadataFilename);
-                if (File.Exists(metadataPath))
-                {
-                    File.Delete(metadataPath);
-                }
-
-                File.WriteAllText(metadataPath, jsonString);
-                Directory.Delete(workingDirectory, true);
-            }
-            else
+            if (!(canonicalChainId is Guid chainId))
             {
                 throw new CommandExitedException("Canonical chain doesn't exists.", -1);
             }
+
+            var genesisHash = _store.IterateIndexes(chainId, 0, 1).First();
+            var tipHash = _store.IterateIndexes(chainId, 0, null).Last();
+            if (!(_store.GetBlockIndex(tipHash) is long tipIndex))
+            {
+                throw new CommandExitedException(
+                    $"The index of {tipHash} doesn't exist.",
+                    -1);
+            }
+
+            var tip = _store.GetBlock<DummyAction>(tipHash);
+            var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
+            HashDigest<SHA256> snapshotTipHash;
+
+            do
+            {
+                snapshotTipIndex++;
+
+                if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is HashDigest<SHA256> hash))
+                {
+                    throw new CommandExitedException(
+                        $"The index {snapshotTipIndex} doesn't exist on ${chainId}.",
+                        -1);
+                }
+
+                snapshotTipHash = hash;
+            } while (!_stateStore.ContainsBlockStates(snapshotTipHash));
+
+            var forkedId = Guid.NewGuid();
+
+            Fork(chainId, forkedId, genesisHash, snapshotTipHash, tip);
+
+            _store.SetCanonicalChainId(forkedId);
+            foreach (var id in _store.ListChainIds().Where(id => !id.Equals(forkedId)))
+            {
+                _store.DeleteChainId(id);
+            }
+
+            var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
+
+            _stateStore.PruneStates(new[] {snapshotTipHash}.ToImmutableHashSet());
+
+
+            var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
+            var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
+            var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
+            var latestTxEpoch = (int) (txTimeSecond / txEpochUnitSeconds);
+
+            _store.Dispose();
+            _stateStore.Dispose();
+
+            var snapshotFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.zip";
+            var snapshotPath = Path.Combine(outputDirectory, snapshotFilename);
+            if (File.Exists(snapshotPath))
+            {
+                File.Delete(snapshotPath);
+            }
+
+            var blockPerceptPath = Path.Combine(storePath, "blockpercept");
+            if (Directory.Exists(blockPerceptPath))
+            {
+                Directory.Delete(blockPerceptPath, true);
+            }
+
+            var stagedTxPath = Path.Combine(storePath, "stagedtx");
+            if (Directory.Exists(stagedTxPath))
+            {
+                Directory.Delete(stagedTxPath, true);
+            }
+
+            string workingDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
+            if (Directory.Exists(workingDirectory))
+            {
+                Directory.Delete(workingDirectory, true);
+            }
+
+            CloneDirectory(storePath, workingDirectory);
+
+            var blockPath = Path.Combine(workingDirectory, "block");
+            var txPath = Path.Combine(workingDirectory, "tx");
+            CleanEpoch(blockPath, currentMetadataBlockEpoch);
+            CleanEpoch(txPath, currentMetadataTxEpoch);
+
+            ZipFile.CreateFromDirectory(workingDirectory, snapshotPath);
+            if (snapshotTipDigest is null)
+            {
+                throw new CommandExitedException("Tip does not exists.", -1);
+            }
+
+            var snapshotTipHeader = snapshotTipDigest.Value.Header;
+            JObject jsonObject = JObject.FromObject(snapshotTipHeader);
+            jsonObject.Add("APV", apv);
+            jsonObject = AddPreviousBlockEpoch(
+                jsonObject,
+                currentMetadataBlockEpoch,
+                currentMetadataTxEpoch,
+                previousMetadataBlockEpoch,
+                latestBlockEpoch,
+                latestTxEpoch,
+                "PreviousBlockEpoch");
+            jsonObject = AddPreviousTxEpoch(
+                jsonObject,
+                currentMetadataBlockEpoch,
+                currentMetadataTxEpoch,
+                previousMetadataTxEpoch,
+                latestBlockEpoch,
+                latestTxEpoch,
+                "PreviousTxEpoch");
+            jsonObject.Add("BlockEpoch", latestBlockEpoch);
+            jsonObject.Add("TxEpoch", latestTxEpoch);
+            var jsonString = JsonConvert.SerializeObject(jsonObject);
+
+            var metadataFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}.json";
+            var metadataPath = Path.Combine(outputDirectory, metadataFilename);
+            if (File.Exists(metadataPath))
+            {
+                File.Delete(metadataPath);
+            }
+
+            File.WriteAllText(metadataPath, jsonString);
+            Directory.Delete(workingDirectory, true);
         }
 
         private void Fork(
