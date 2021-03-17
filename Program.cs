@@ -110,7 +110,7 @@ namespace NineChronicles.Snapshot
                 const int blockEpochUnitSeconds = 86400;
                 const int txEpochUnitSeconds = 86400;
                 var latestBlockEpoch = (int)(tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
-                var latestBlockWithTx = GetLastestBlockWithTransaction<DummyAction>(tip, _store);
+                var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
                 var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
                 var latestTxEpoch = (int)(txTimeSecond / txEpochUnitSeconds );
 
@@ -271,7 +271,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private static Block<T> GetLastestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
+        private static Block<T> GetLatestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
             where T : DummyAction, new()
         {
             var block = tip;
@@ -353,7 +353,7 @@ namespace NineChronicles.Snapshot
                     jsonObject.Add(txEpochName, currentMetadataTxEpoch);
                 }
 
-            return jsonObject;
+                return jsonObject;
         }
 
         private static JObject AddPreviousBlockEpoch(
@@ -382,7 +382,7 @@ namespace NineChronicles.Snapshot
                     jsonObject.Add(blockEpochName, currentMetadataBlockEpoch);
                 }
 
-            return jsonObject;
+                return jsonObject;
         }
 
         private class DummyAction : IAction
