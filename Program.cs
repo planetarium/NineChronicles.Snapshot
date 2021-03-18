@@ -153,8 +153,24 @@ namespace NineChronicles.Snapshot
 
             var blockPath = Path.Combine(partitionDirectory, "block");
             var txPath = Path.Combine(partitionDirectory, "tx");
-            CleanEpoch(blockPath, currentMetadataBlockEpoch);
-            CleanEpoch(txPath, currentMetadataTxEpoch);
+            if (currentMetadataBlockEpoch == latestBlockEpoch)
+            {
+                CleanEpoch(blockPath, previousMetadataBlockEpoch);
+            }
+            else
+            {
+                CleanEpoch(blockPath, currentMetadataBlockEpoch);
+            }
+
+            if (currentMetadataTxEpoch == latestTxEpoch)
+            {
+                CleanEpoch(txPath, previousMetadataTxEpoch);
+            }
+            else
+            {
+                CleanEpoch(txPath, currentMetadataTxEpoch);
+            }
+
             CleanPartitionStore(partitionDirectory);
             CleanStateStore(stateDirectory);
 
@@ -415,7 +431,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private void CleanEpoch(string path, int currentMetadataEpoch)
+        private void CleanEpoch(string path, int epochLimit)
         {
             string[] directories = Directory.GetDirectories(
                 path,
@@ -427,7 +443,7 @@ namespace NineChronicles.Snapshot
                 {
                     string dirName = new DirectoryInfo(dir).Name;
                     int epoch = Int32.Parse(dirName.Substring(5));
-                    if (epoch <= currentMetadataEpoch)
+                    if (epoch + 1 < epochLimit)
                     {
                         Directory.Delete(dir, true);
                     }
