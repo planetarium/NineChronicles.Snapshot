@@ -45,6 +45,14 @@ namespace NineChronicles.Snapshot
                 "planetarium",
                 "9c"
             );
+
+            if (!Directory.Exists(outputDirectory))
+            {
+                Directory.CreateDirectory(outputDirectory);
+                Directory.CreateDirectory(outputDirectory + "/partition");
+                Directory.CreateDirectory(outputDirectory + "/state");
+            }
+
             outputDirectory = string.IsNullOrEmpty(outputDirectory)
                 ? Environment.CurrentDirectory
                 : outputDirectory;
@@ -126,20 +134,33 @@ namespace NineChronicles.Snapshot
             _store.Dispose();
             _stateStore.Dispose();
 
-            var baseFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}";
+            var partitionBaseFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}";
+            var stateBaseFilename = $"state_latest";
 
-            var snapshotFilename = $"{baseFilename}.zip";
-            var snapshotPath = Path.Combine(outputDirectory, snapshotFilename);
-            string workingDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
-            CleanStore(snapshotPath, storePath, workingDirectory);
-            CloneDirectory(storePath, workingDirectory);
+            var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
+            var partitionSnapshotPath = Path.Combine(outputDirectory + "/partition", partitionSnapshotFilename);
+            var stateSnapshotFilename = $"{stateBaseFilename}.zip";
+            var stateSnapshotPath = Path.Combine(outputDirectory + "/state", stateSnapshotFilename);
+            string partitionDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
+            string stateDirectory = Path.Combine(Path.GetTempPath(), "state");
+            CleanStore(
+                partitionSnapshotPath,
+                stateSnapshotPath,
+                storePath,
+                partitionDirectory,
+                stateDirectory);
+            CloneDirectory(storePath, partitionDirectory);
+            CloneDirectory(storePath, stateDirectory);
 
-            var blockPath = Path.Combine(workingDirectory, "block");
-            var txPath = Path.Combine(workingDirectory, "tx");
+            var blockPath = Path.Combine(partitionDirectory, "block");
+            var txPath = Path.Combine(partitionDirectory, "tx");
             CleanEpoch(blockPath, currentMetadataBlockEpoch);
             CleanEpoch(txPath, currentMetadataTxEpoch);
+            CleanPartitionStore(partitionDirectory);
+            CleanStateStore(stateDirectory);
 
-            ZipFile.CreateFromDirectory(workingDirectory, snapshotPath);
+            ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
+            ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
             if (snapshotTipDigest is null)
             {
                 throw new CommandExitedException("Tip does not exists.", -1);
@@ -154,7 +175,7 @@ namespace NineChronicles.Snapshot
                 previousMetadataTxEpoch,
                 latestBlockEpoch,
                 latestTxEpoch);
-            var metadataFilename = $"{baseFilename}.json";
+            var metadataFilename = $"{partitionBaseFilename}.json";
             var metadataPath = Path.Combine(outputDirectory, metadataFilename);
             if (File.Exists(metadataPath))
             {
@@ -162,7 +183,8 @@ namespace NineChronicles.Snapshot
             }
 
             File.WriteAllText(metadataPath, stringfyMetadata);
-            Directory.Delete(workingDirectory, true);
+            Directory.Delete(partitionDirectory, true);
+            Directory.Delete(stateDirectory, true);
         }
 
         private string GetMetadata(
@@ -175,53 +197,116 @@ namespace NineChronicles.Snapshot
             int latestBlockEpoch,
             int latestTxEpoch)
         {
-             var snapshotTipHeader = snapshotTipDigest.Header;
-             JObject jsonObject = JObject.FromObject(snapshotTipHeader);
-             jsonObject.Add("APV", apv);
-             jsonObject = AddPreviousBlockEpoch(
-                 jsonObject,
-                 currentMetadataBlockEpoch,
-                 currentMetadataTxEpoch,
-                 previousMetadataBlockEpoch,
-                 latestBlockEpoch,
-                 latestTxEpoch,
-                 "PreviousBlockEpoch");
-             jsonObject = AddPreviousTxEpoch(
-                 jsonObject,
-                 currentMetadataBlockEpoch,
-                 currentMetadataTxEpoch,
-                 previousMetadataTxEpoch,
-                 latestBlockEpoch,
-                 latestTxEpoch,
-                 "PreviousTxEpoch");
-             jsonObject.Add("BlockEpoch", latestBlockEpoch);
-             jsonObject.Add("TxEpoch", latestTxEpoch);
-             return JsonConvert.SerializeObject(jsonObject);
+            var snapshotTipHeader = snapshotTipDigest.Header;
+            JObject jsonObject = JObject.FromObject(snapshotTipHeader);
+            jsonObject.Add("APV", apv);
+            jsonObject = AddPreviousBlockEpoch(
+                jsonObject,
+                currentMetadataBlockEpoch,
+                currentMetadataTxEpoch,
+                previousMetadataBlockEpoch,
+                latestBlockEpoch,
+                latestTxEpoch,
+                "PreviousBlockEpoch");
+            jsonObject = AddPreviousTxEpoch(
+                jsonObject,
+                currentMetadataBlockEpoch,
+                currentMetadataTxEpoch,
+                previousMetadataTxEpoch,
+                latestBlockEpoch,
+                latestTxEpoch,
+                "PreviousTxEpoch");
+            jsonObject.Add("BlockEpoch", latestBlockEpoch);
+            jsonObject.Add("TxEpoch", latestTxEpoch);
+            return JsonConvert.SerializeObject(jsonObject);
         }
 
-        private void CleanStore(string snapshotPath, string storePath, string workingDirectory)
+        private void CleanStore(
+            string partitionSnapshotPath,
+            string stateSnapshotPath,
+            string storePath,
+            string partitionDirectory,
+            string stateDirectory)
         {
-             if (File.Exists(snapshotPath))
-             {
-                 File.Delete(snapshotPath);
-             }
- 
-             var blockPerceptPath = Path.Combine(storePath, "blockpercept");
-             if (Directory.Exists(blockPerceptPath))
-             {
-                 Directory.Delete(blockPerceptPath, true);
-             }
- 
-             var stagedTxPath = Path.Combine(storePath, "stagedtx");
-             if (Directory.Exists(stagedTxPath))
-             {
-                 Directory.Delete(stagedTxPath, true);
-             }
- 
-             if (Directory.Exists(workingDirectory))
-             {
-                 Directory.Delete(workingDirectory, true);
-             }           
+            if (File.Exists(partitionSnapshotPath))
+            {
+                File.Delete(partitionSnapshotPath);
+            }
+
+            if (File.Exists(stateSnapshotPath))
+            {
+                File.Delete(stateSnapshotPath);
+            }
+
+            var blockPerceptPath = Path.Combine(storePath, "blockpercept");
+            if (Directory.Exists(blockPerceptPath))
+            {
+                Directory.Delete(blockPerceptPath, true);
+            }
+
+            var stagedTxPath = Path.Combine(storePath, "stagedtx");
+            if (Directory.Exists(stagedTxPath))
+            {
+                Directory.Delete(stagedTxPath, true);
+            }
+
+            if (Directory.Exists(partitionDirectory))
+            {
+                Directory.Delete(partitionDirectory, true);
+            }
+
+            if (Directory.Exists(stateDirectory))
+            {
+                Directory.Delete(stateDirectory, true);
+            }
+        }
+
+        private void CleanPartitionStore(string partitionDirectory)
+        {
+            var statePath = Path.Combine(partitionDirectory, "state");
+            if (Directory.Exists(statePath))
+            {
+            Directory.Delete(statePath, true);
+            }
+
+            var stateHashesPath = Path.Combine(partitionDirectory, "state_hashes");
+            if (Directory.Exists(stateHashesPath))
+            {
+            Directory.Delete(stateHashesPath, true);
+            }
+
+            var stateRefPath = Path.Combine(partitionDirectory, "stateref");
+            if (Directory.Exists(stateRefPath))
+            {
+            Directory.Delete(stateRefPath, true);
+            }
+
+            var statesPath = Path.Combine(partitionDirectory, "states");
+            if (Directory.Exists(statesPath))
+            {
+            Directory.Delete(statesPath, true);
+            }
+
+            var chainPath = Path.Combine(partitionDirectory, "chain");
+            if (Directory.Exists(chainPath))
+            {
+            Directory.Delete(chainPath, true);
+            }
+        }
+
+        private void CleanStateStore(string stateDirectory)
+        {
+            var blockPath = Path.Combine(stateDirectory, "block");
+            if (Directory.Exists(blockPath))
+            {
+                Directory.Delete(blockPath, true);
+            }
+
+            var txPath = Path.Combine(stateDirectory, "tx");
+            if (Directory.Exists(txPath))
+            {
+                Directory.Delete(txPath, true);
+            }
         }
 
         private void Fork(
