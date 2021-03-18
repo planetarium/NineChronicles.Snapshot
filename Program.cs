@@ -46,21 +46,20 @@ namespace NineChronicles.Snapshot
                 "9c"
             );
 
-            if (!Directory.Exists(outputDirectory))
-            {
-                Directory.CreateDirectory(outputDirectory);
-                Directory.CreateDirectory(outputDirectory + "/partition");
-                Directory.CreateDirectory(outputDirectory + "/state");
-            }
+            Directory.CreateDirectory(outputDirectory);
+            Directory.CreateDirectory(outputDirectory + "/partition");
+            Directory.CreateDirectory(outputDirectory + "/state");
+            Directory.CreateDirectory(outputDirectory + "/metadata");
 
             outputDirectory = string.IsNullOrEmpty(outputDirectory)
                 ? Environment.CurrentDirectory
                 : outputDirectory;
 
-            int currentMetadataBlockEpoch = GetMetaDataEpoch(outputDirectory, "BlockEpoch");
-            int currentMetadataTxEpoch = GetMetaDataEpoch(outputDirectory, "TxEpoch");
-            int previousMetadataBlockEpoch = GetMetaDataEpoch(outputDirectory, "PreviousBlockEpoch");
-            int previousMetadataTxEpoch = GetMetaDataEpoch(outputDirectory, "PreviousTxEpoch");
+            var metadataDirectory = Path.Combine(outputDirectory, "metadata");
+            int currentMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "BlockEpoch");
+            int currentMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "TxEpoch");
+            int previousMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousBlockEpoch");
+            int previousMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousTxEpoch");
 
             storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
             if (!Directory.Exists(storePath))
@@ -176,7 +175,7 @@ namespace NineChronicles.Snapshot
                 latestBlockEpoch,
                 latestTxEpoch);
             var metadataFilename = $"{partitionBaseFilename}.json";
-            var metadataPath = Path.Combine(outputDirectory, metadataFilename);
+            var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
             if (File.Exists(metadataPath))
             {
                 File.Delete(metadataPath);
