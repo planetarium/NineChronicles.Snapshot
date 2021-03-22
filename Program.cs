@@ -307,20 +307,43 @@ namespace NineChronicles.Snapshot
             {
             Directory.Delete(chainPath, true);
             }
+
+            var blockPath = Path.Combine(partitionDirectory, "block");
+            var blockIndexPath = Path.Combine(blockPath, "blockindex");
+            if (Directory.Exists(blockIndexPath))
+            {
+            Directory.Delete(blockIndexPath, true);
+            }
+
+            var txPath = Path.Combine(partitionDirectory, "tx");
+            var txIndexPath = Path.Combine(txPath, "txindex");
+            if (Directory.Exists(txIndexPath))
+            {
+            Directory.Delete(txIndexPath, true);
+            }
         }
 
         private void CleanStateStore(string stateDirectory)
         {
             var blockPath = Path.Combine(stateDirectory, "block");
-            if (Directory.Exists(blockPath))
+            var txPath = Path.Combine(stateDirectory, "tx");
+            string[] blockDirectories = Directory.GetDirectories(
+                blockPath,
+                "epoch*",
+                SearchOption.AllDirectories);
+            string[] txDirectories = Directory.GetDirectories(
+                txPath,
+                "epoch*",
+                SearchOption.AllDirectories);
+
+            foreach (string dir in blockDirectories)
             {
-                Directory.Delete(blockPath, true);
+                Directory.Delete(dir, true);
             }
 
-            var txPath = Path.Combine(stateDirectory, "tx");
-            if (Directory.Exists(txPath))
+            foreach (string dir in txDirectories)
             {
-                Directory.Delete(txPath, true);
+                Directory.Delete(dir, true);
             }
         }
 
@@ -443,7 +466,7 @@ namespace NineChronicles.Snapshot
                 {
                     string dirName = new DirectoryInfo(dir).Name;
                     int epoch = Int32.Parse(dirName.Substring(5));
-                    if (epoch + 1 < epochLimit)
+                    if (epoch < epochLimit)
                     {
                         Directory.Delete(dir, true);
                     }
