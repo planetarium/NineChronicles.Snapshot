@@ -47,9 +47,9 @@ namespace NineChronicles.Snapshot
             );
 
             Directory.CreateDirectory(outputDirectory);
-            Directory.CreateDirectory(outputDirectory + "/partition");
-            Directory.CreateDirectory(outputDirectory + "/state");
-            Directory.CreateDirectory(outputDirectory + "/metadata");
+            Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
+            Directory.CreateDirectory(Path.Combine(outputDirectory, "state"));
+            Directory.CreateDirectory(Path.Combine(outputDirectory, "metadata"));
 
             outputDirectory = string.IsNullOrEmpty(outputDirectory)
                 ? Environment.CurrentDirectory
@@ -81,7 +81,7 @@ namespace NineChronicles.Snapshot
             var canonicalChainId = _store.GetCanonicalChainId();
             if (!(canonicalChainId is Guid chainId))
             {
-                throw new CommandExitedException("Canonical chain doesn't exists.", -1);
+                throw new CommandExitedException("Canonical chain doesn't exist.", -1);
             }
 
             var genesisHash = _store.IterateIndexes(chainId, 0, 1).First();
@@ -137,9 +137,9 @@ namespace NineChronicles.Snapshot
             var stateBaseFilename = $"state_latest";
 
             var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
-            var partitionSnapshotPath = Path.Combine(outputDirectory + "/partition", partitionSnapshotFilename);
+            var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
             var stateSnapshotFilename = $"{stateBaseFilename}.zip";
-            var stateSnapshotPath = Path.Combine(outputDirectory + "/state", stateSnapshotFilename);
+            var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
             string partitionDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
             string stateDirectory = Path.Combine(Path.GetTempPath(), "state");
             CleanStore(
@@ -178,7 +178,7 @@ namespace NineChronicles.Snapshot
             ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
             if (snapshotTipDigest is null)
             {
-                throw new CommandExitedException("Tip does not exists.", -1);
+                throw new CommandExitedException("Tip does not exist.", -1);
             }
 
             string stringfyMetadata = GetMetadata(
@@ -253,73 +253,42 @@ namespace NineChronicles.Snapshot
                 File.Delete(stateSnapshotPath);
             }
 
-            var blockPerceptPath = Path.Combine(storePath, "blockpercept");
-            if (Directory.Exists(blockPerceptPath))
+            var cleanDirectories = new[]
             {
-                Directory.Delete(blockPerceptPath, true);
-            }
+                Path.Combine(storePath, "blockpercept"),
+                Path.Combine(storePath, "stagedtx"),
+                partitionDirectory,
+                stateDirectory
+            };
 
-            var stagedTxPath = Path.Combine(storePath, "stagedtx");
-            if (Directory.Exists(stagedTxPath))
+            foreach (var path in cleanDirectories)
             {
-                Directory.Delete(stagedTxPath, true);
-            }
-
-            if (Directory.Exists(partitionDirectory))
-            {
-                Directory.Delete(partitionDirectory, true);
-            }
-
-            if (Directory.Exists(stateDirectory))
-            {
-                Directory.Delete(stateDirectory, true);
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, true);
+                }
             }
         }
 
         private void CleanPartitionStore(string partitionDirectory)
         {
-            var statePath = Path.Combine(partitionDirectory, "state");
-            if (Directory.Exists(statePath))
+            var cleanDirectories = new[]
             {
-            Directory.Delete(statePath, true);
-            }
+                Path.Combine(partitionDirectory, "state"),
+                Path.Combine(partitionDirectory, "state_hashes"),
+                Path.Combine(partitionDirectory, "stateref"),
+                Path.Combine(partitionDirectory, "states"),
+                Path.Combine(partitionDirectory, "chain"),
+                Path.Combine(partitionDirectory, "block", "blockindex"),
+                Path.Combine(partitionDirectory, "tx", "txindex"),
+            };
 
-            var stateHashesPath = Path.Combine(partitionDirectory, "state_hashes");
-            if (Directory.Exists(stateHashesPath))
+            foreach (var path in cleanDirectories)
             {
-            Directory.Delete(stateHashesPath, true);
-            }
-
-            var stateRefPath = Path.Combine(partitionDirectory, "stateref");
-            if (Directory.Exists(stateRefPath))
-            {
-            Directory.Delete(stateRefPath, true);
-            }
-
-            var statesPath = Path.Combine(partitionDirectory, "states");
-            if (Directory.Exists(statesPath))
-            {
-            Directory.Delete(statesPath, true);
-            }
-
-            var chainPath = Path.Combine(partitionDirectory, "chain");
-            if (Directory.Exists(chainPath))
-            {
-            Directory.Delete(chainPath, true);
-            }
-
-            var blockPath = Path.Combine(partitionDirectory, "block");
-            var blockIndexPath = Path.Combine(blockPath, "blockindex");
-            if (Directory.Exists(blockIndexPath))
-            {
-            Directory.Delete(blockIndexPath, true);
-            }
-
-            var txPath = Path.Combine(partitionDirectory, "tx");
-            var txIndexPath = Path.Combine(txPath, "txindex");
-            if (Directory.Exists(txIndexPath))
-            {
-            Directory.Delete(txIndexPath, true);
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, true);
+                }
             }
         }
 
