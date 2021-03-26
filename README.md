@@ -13,7 +13,7 @@
 
 ```
 $ dotnet run -- --help
-Usage: Snapshot [--output-directory <String>] [--store-path <String>] [--block-before <Int32>] [--apv <String>] [--help] [--version]
+Usage: Snapshot [--store-path <String>] [--output-directory <String>] [--block-before <Int32>] [--apv <String>] [--help] [--version]
 
 Snapshot
 
