@@ -153,23 +153,20 @@ namespace NineChronicles.Snapshot
 
             var blockPath = Path.Combine(partitionDirectory, "block");
             var txPath = Path.Combine(partitionDirectory, "tx");
-            if (currentMetadataBlockEpoch == latestBlockEpoch)
-            {
-                CleanEpoch(blockPath, previousMetadataBlockEpoch);
-            }
-            else
-            {
-                CleanEpoch(blockPath, currentMetadataBlockEpoch);
-            }
 
-            if (currentMetadataTxEpoch == latestTxEpoch)
-            {
-                CleanEpoch(txPath, previousMetadataTxEpoch);
-            }
-            else
-            {
-                CleanEpoch(txPath, currentMetadataTxEpoch);
-            }
+            // get epoch limit for block & tx
+            var blockEpochLimit = GetEpochLimit(
+                latestBlockEpoch,
+                currentMetadataBlockEpoch,
+                previousMetadataBlockEpoch);
+            var txEpochLimit = GetEpochLimit(
+                latestTxEpoch,
+                currentMetadataTxEpoch,
+                previousMetadataTxEpoch);
+
+            // clean epoch directories in block & tx
+            CleanEpoch(blockPath, blockEpochLimit);
+            CleanEpoch(txPath, txEpochLimit);
 
             CleanPartitionStore(partitionDirectory);
             CleanStateStore(stateDirectory);
@@ -200,6 +197,37 @@ namespace NineChronicles.Snapshot
             File.WriteAllText(metadataPath, stringfyMetadata);
             Directory.Delete(partitionDirectory, true);
             Directory.Delete(stateDirectory, true);
+        }
+
+        private int GetEpochLimit(
+            int latestEpoch,
+            int currentMetadataEpoch,
+            int previousMetadataEpoch
+        )
+        {
+            if (latestEpoch == currentMetadataEpoch)
+            {
+                // case when all epochs are the same
+                if (latestEpoch == previousMetadataEpoch)
+                {
+                    // return previousMetadataEpoch - 1
+                    // to save previous epoch in snapshot
+                    return previousMetadataEpoch - 1;
+                }
+                // case when metadata points to genesis snapshot
+                else if (previousMetadataEpoch == 0)
+                {
+                    return currentMetadataEpoch - 1;
+                }
+                else
+                {
+                    return previousMetadataEpoch;
+                }
+            }
+            else
+            {
+                return currentMetadataEpoch;
+            }
         }
 
         private string CreateMetadata(
