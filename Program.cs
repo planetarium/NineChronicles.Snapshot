@@ -181,7 +181,7 @@ namespace NineChronicles.Snapshot
                 throw new CommandExitedException("Tip does not exist.", -1);
             }
 
-            string stringfyMetadata = GetMetadata(
+            string stringfyMetadata = CreateMetadata(
                 snapshotTipDigest.Value,
                 apv,
                 currentMetadataBlockEpoch,
@@ -202,7 +202,7 @@ namespace NineChronicles.Snapshot
             Directory.Delete(stateDirectory, true);
         }
 
-        private string GetMetadata(
+        private string CreateMetadata(
             BlockDigest snapshotTipDigest,
             string apv,
             int currentMetadataBlockEpoch,
