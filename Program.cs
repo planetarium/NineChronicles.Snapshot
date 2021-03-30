@@ -133,7 +133,11 @@ namespace NineChronicles.Snapshot
             _store.Dispose();
             _stateStore.Dispose();
 
-            var partitionBaseFilename = $"snapshot-{latestBlockEpoch}-{latestTxEpoch}";
+            var partitionBaseFilename = GetPartitionBaseFileName(
+                currentMetadataBlockEpoch,
+                currentMetadataTxEpoch,
+                latestBlockEpoch,
+                latestTxEpoch);
             var stateBaseFilename = $"state_latest";
 
             var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
@@ -199,6 +203,24 @@ namespace NineChronicles.Snapshot
             Directory.Delete(stateDirectory, true);
         }
 
+        private string GetPartitionBaseFileName(
+            int currentMetadataBlockEpoch,
+            int currentMetadataTxEpoch,
+            int latestBlockEpoch,
+            int latestTxEpoch
+        )
+        {
+            // decrease latest epochs by 1 when creating genesis snapshot
+            if (currentMetadataBlockEpoch == 0 && currentMetadataTxEpoch == 0)
+            {
+                return $"snapshot-{latestBlockEpoch - 1}-{latestTxEpoch - 1}";
+            }
+            else
+            {
+                return $"snapshot-{latestBlockEpoch}-{latestTxEpoch}";
+            }
+        }
+
         private int GetEpochLimit(
             int latestEpoch,
             int currentMetadataEpoch,
@@ -259,8 +281,19 @@ namespace NineChronicles.Snapshot
                 latestBlockEpoch,
                 latestTxEpoch,
                 "PreviousTxEpoch");
-            jsonObject.Add("BlockEpoch", latestBlockEpoch);
-            jsonObject.Add("TxEpoch", latestTxEpoch);
+
+            // decrease latest epochs by 1 for genesis snapshot
+            if (currentMetadataBlockEpoch == 0 && currentMetadataTxEpoch == 0)
+            {
+                jsonObject.Add("BlockEpoch", latestBlockEpoch - 1);
+                jsonObject.Add("TxEpoch", latestTxEpoch - 1);
+            }
+            else
+            {
+                jsonObject.Add("BlockEpoch", latestBlockEpoch);
+                jsonObject.Add("TxEpoch", latestTxEpoch);
+            }
+
             return JsonConvert.SerializeObject(jsonObject);
         }
 
