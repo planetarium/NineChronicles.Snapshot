@@ -95,13 +95,13 @@ namespace NineChronicles.Snapshot
 
             var tip = _store.GetBlock<DummyAction>(tipHash);
             var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
-            HashDigest<SHA256> snapshotTipHash;
+            BlockHash snapshotTipHash;
 
             do
             {
                 snapshotTipIndex++;
 
-                if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is HashDigest<SHA256> hash))
+                if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is BlockHash hash))
                 {
                     throw new CommandExitedException(
                         $"The index {snapshotTipIndex} doesn't exist on ${chainId}.",
@@ -380,8 +380,8 @@ namespace NineChronicles.Snapshot
         private void Fork(
             Guid src,
             Guid dest,
-            HashDigest<SHA256> genesisHash,
-            HashDigest<SHA256> branchpointHash,
+            BlockHash genesisHash,
+            BlockHash branchpointHash,
             Block<DummyAction> tip)
         {
             var branchPoint = _store.GetBlock<DummyAction>(branchpointHash);
@@ -392,7 +392,7 @@ namespace NineChronicles.Snapshot
 
             for (
                 Block<DummyAction> block = tip;
-                block.PreviousHash is HashDigest<SHA256> hash
+                block.PreviousHash is BlockHash hash
                 && !block.Hash.Equals(branchpointHash);
                 block = _store.GetBlock<DummyAction>(hash))
             {
@@ -458,7 +458,7 @@ namespace NineChronicles.Snapshot
             var block = tip;
             while(!block.Transactions.Any())
             {
-                if (block.PreviousHash is HashDigest<SHA256> newHash)
+                if (block.PreviousHash is BlockHash newHash)
                 {
                     block = store.GetBlock<T>(newHash);
                 }
