@@ -52,6 +52,7 @@ namespace NineChronicles.Snapshot
 
             var statesPath = Path.Combine(storePath, "states");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
+            var txexecPath = Path.Combine(storePath, "txexec");
 
             _store = new MonoRocksDBStore(storePath);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
@@ -116,6 +117,11 @@ namespace NineChronicles.Snapshot
                 if (Directory.Exists(blockPerceptPath))
                 {
                     Directory.Delete(blockPerceptPath, true);
+                }
+
+                if (Directory.Exists(txexecPath))
+                {
+                    Directory.Delete(txexecPath, true);
                 }
 
                 ZipFile.CreateFromDirectory(storePath, snapshotPath);
