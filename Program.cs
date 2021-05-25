@@ -20,7 +20,7 @@ namespace NineChronicles.Snapshot
 {
     class Program
     {
-        private RocksDBStore _store;
+        private MonoRocksDBStore _store;
         private TrieStateStore _stateStore;
 
         static void Main(string[] args)
@@ -53,7 +53,7 @@ namespace NineChronicles.Snapshot
             var statesPath = Path.Combine(storePath, "states");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
 
-            _store = new RocksDBStore(storePath);
+            _store = new MonoRocksDBStore(storePath);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
             IKeyValueStore stateHashKeyValueStore = new RocksDBKeyValueStore(stateHashesPath);
             _stateStore = new TrieStateStore(stateKeyValueStore, stateHashKeyValueStore);
@@ -71,13 +71,13 @@ namespace NineChronicles.Snapshot
                 }
                 var tip = _store.GetBlock<DummyAction>(tipHash);
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
-                HashDigest<SHA256> snapshotTipHash;
+                BlockHash snapshotTipHash;
 
                 do
                 {
                     snapshotTipIndex++;
 
-                    if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is HashDigest<SHA256> hash))
+                    if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is BlockHash hash))
                     {
                         throw new CommandExitedException(
                             $"The index {snapshotTipIndex} doesn't exist on ${chainId}.",
@@ -148,8 +148,8 @@ namespace NineChronicles.Snapshot
         private void Fork(
             Guid src,
             Guid dest,
-            HashDigest<SHA256> genesisHash,
-            HashDigest<SHA256> branchpointHash,
+            BlockHash genesisHash,
+            BlockHash branchpointHash,
             Block<DummyAction> tip)
         {
             var branchPoint = _store.GetBlock<DummyAction>(branchpointHash);
@@ -160,7 +160,7 @@ namespace NineChronicles.Snapshot
 
             for (
                 Block<DummyAction> block = tip;
-                block.PreviousHash is HashDigest<SHA256> hash
+                block.PreviousHash is BlockHash hash
                 && !block.Hash.Equals(branchpointHash);
                 block = _store.GetBlock<DummyAction>(hash))
             {
