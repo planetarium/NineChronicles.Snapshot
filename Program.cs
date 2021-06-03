@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using Bencodex.Types;
 using Cocona;
 using Libplanet;
@@ -14,6 +15,7 @@ using Libplanet.Store;
 using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RocksDbSharp;
 
 namespace NineChronicles.Snapshot
 {
@@ -75,6 +77,8 @@ namespace NineChronicles.Snapshot
                 Directory.Delete(txexecPath, true);
             }
 
+            PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
+
             _store = new RocksDBStore(
                 storePath,
                 blockEpochUnitSeconds: blockEpochUnitSeconds,
@@ -88,9 +92,8 @@ namespace NineChronicles.Snapshot
             {
                 throw new CommandExitedException("Canonical chain doesn't exist.", -1);
             }
-
-            var genesisHash = _store.IterateIndexes(chainId, 0, 1).First();
-            var tipHash = _store.IterateIndexes(chainId, 0, null).Last();
+            var tipHash = _store.IndexBlockHash(chainId, -1) 
+                ?? throw new CommandExitedException("The given chain seems empty.", -1);
             if (!(_store.GetBlockIndex(tipHash) is long tipIndex))
             {
                 throw new CommandExitedException(
@@ -118,7 +121,7 @@ namespace NineChronicles.Snapshot
 
             var forkedId = Guid.NewGuid();
 
-            Fork(chainId, forkedId, genesisHash, snapshotTipHash, tip);
+            Fork(chainId, forkedId, snapshotTipHash, tip);
 
             _store.SetCanonicalChainId(forkedId);
             foreach (var id in _store.ListChainIds().Where(id => !id.Equals(forkedId)))
@@ -206,6 +209,79 @@ namespace NineChronicles.Snapshot
             File.WriteAllText(metadataPath, stringfyMetadata);
             Directory.Delete(partitionDirectory, true);
             Directory.Delete(stateDirectory, true);
+        }
+
+        private void PruneOutdatedColumnFamilies(string path)
+        {
+            var opt = new DbOptions();
+            List<string> cfns = RocksDb.ListColumnFamilies(opt, path).ToList();
+            var cfs = new ColumnFamilies();
+            foreach (string name in cfns)
+            {
+                cfs.Add(name, opt);
+            }
+
+            using RocksDb db = RocksDb.Open(opt, path, cfs);
+            var ccid = new Guid(db.Get(new[] { (byte)'C' }));
+            ColumnFamilyHandle ccf = db.GetColumnFamily(ccid.ToString());
+
+            (ColumnFamilyHandle, long)? PreviousColumnFamily(ColumnFamilyHandle cfh)
+            {
+                byte[] cid = db.Get(new[] { (byte)'P' }, cfh);
+
+                if (cid is null)
+                {
+                    return null;
+                }
+                else
+                {
+                    return (
+                        db.GetColumnFamily(new Guid(cid).ToString()),
+                        RocksDBStoreBitConverter.ToInt64(db.Get(new[] { (byte)'p' }, cfh))
+                    );
+                }
+            }
+
+            var cfInfo = PreviousColumnFamily(ccf);
+            var ip = new[] { (byte)'I' };
+            var batch = new WriteBatch();
+            while (cfInfo is { } cfInfoNotNull)
+            {
+                ColumnFamilyHandle cf = cfInfoNotNull.Item1;
+                long cfi = cfInfoNotNull.Item2;
+                
+                Iterator it = db.NewIterator(cf);
+                for (it.Seek(ip); it.Valid() && it.Key().StartsWith(ip); it.Next())
+                {
+                    long index = RocksDBStoreBitConverter.ToInt64(it.Key().Skip(1).ToArray());
+                    if (index > cfi)
+                    {
+                        continue;
+                    }
+                    batch.Put(it.Key(), it.Value(), ccf);
+
+                    if (batch.Count() > 10000)
+                    {
+                        db.Write(batch);
+                        batch.Clear();
+                    }
+                }
+
+                cfInfo = PreviousColumnFamily(cf);
+            }
+
+            db.Write(batch);
+
+            foreach (string name in cfns)
+            {
+                if (name == ccid.ToString() || name == "default")
+                {
+                    continue;
+                }
+                db.DropColumnFamily(name);
+            }
+
+            db.Remove(new[] { (byte)'P' }, ccf);
         }
 
         private string GetPartitionBaseFileName(
@@ -389,15 +465,12 @@ namespace NineChronicles.Snapshot
         private void Fork(
             Guid src,
             Guid dest,
-            BlockHash genesisHash,
             BlockHash branchpointHash,
             Block<DummyAction> tip)
         {
             var branchPoint = _store.GetBlock<DummyAction>(branchpointHash);
-            _store.AppendIndex(dest, genesisHash);
             _store.ForkBlockIndexes(src, dest, branchpointHash);
-
-            var signersToStrip = new Dictionary<Address, int>();
+            _store.ForkTxNonces(src, dest);
 
             for (
                 Block<DummyAction> block = tip;
@@ -412,32 +485,8 @@ namespace NineChronicles.Snapshot
 
                 foreach ((Address address, int txCount) in signers)
                 {
-                    signersToStrip.TryGetValue(address, out var existingValue);
-                    signersToStrip[address] = existingValue + txCount;
+                    _store.IncreaseTxNonce(dest, address, -txCount);
                 }
-            }
-
-
-            foreach (KeyValuePair<Address, long> pair in _store.ListTxNonces(src))
-            {
-                Address address = pair.Key;
-                long existingNonce = pair.Value;
-                long txNonce = existingNonce;
-                if (signersToStrip.TryGetValue(address, out var staleTxCount))
-                {
-                    txNonce -= staleTxCount;
-                }
-
-                if (txNonce < 0)
-                {
-                    throw new InvalidOperationException(
-                        $"A tx nonce for {address} in the store seems broken.\n" +
-                        $"Existing tx nonce: {existingNonce}\n" +
-                        $"# of stale transactions: {staleTxCount}\n"
-                    );
-                }
-
-                _store.IncreaseTxNonce(dest, address, txNonce);
             }
         }
 
@@ -580,6 +629,67 @@ namespace NineChronicles.Snapshot
             public void RenderError(IActionContext context, Exception exception) { }
             public void Unrender(IActionContext context, IAccountStateDelta nextStates) { }
             public void UnrenderError(IActionContext context, Exception exception) { }
+        }
+
+        internal static class RocksDBStoreBitConverter
+        {
+            /// <summary>
+            /// Get <c>long</c> representation of the <paramref name="value"/>.
+            /// </summary>
+            /// <param name="value">The Big-endian byte-array value to convert to <c>long</c>.</param>
+            /// <returns>The <c>long</c> representation of the <paramref name="value"/>.</returns>
+            public static long ToInt64(byte[] value)
+            {
+                byte[] bytes = new byte[sizeof(long)];
+                value.CopyTo(bytes, 0);
+
+                // Use Big-endian to order index lexicographically.
+                if (BitConverter.IsLittleEndian)
+                {
+                    Array.Reverse(bytes);
+                }
+
+                return BitConverter.ToInt64(bytes, 0);
+            }
+
+            /// <summary>
+            /// Get <c>string</c> representation of the <paramref name="value"/>.
+            /// </summary>
+            /// <param name="value">The byte-array value to convert to <c>string</c>.</param>
+            /// <returns>The <c>string</c> representation of the <paramref name="value"/>.</returns>
+            public static string GetString(byte[] value)
+            {
+                return Encoding.UTF8.GetString(value);
+            }
+
+            /// <summary>
+            /// Get Big-endian byte-array representation of the <paramref name="value"/>.
+            /// </summary>
+            /// <param name="value">The <c>long</c> value to convert to byte-array.</param>
+            /// <returns>The Big-endian byte-array representation of the <paramref name="value"/>.
+            /// </returns>
+            public static byte[] GetBytes(long value)
+            {
+                byte[] bytes = BitConverter.GetBytes(value);
+
+                // Use Big-endian to order index lexicographically.
+                if (BitConverter.IsLittleEndian)
+                {
+                    Array.Reverse(bytes);
+                }
+
+                return bytes;
+            }
+
+            /// <summary>
+            /// Get encoded byte-array representation of the <paramref name="value"/>.
+            /// </summary>
+            /// <param name="value">The <c>string</c> to convert to byte-array.</param>
+            /// <returns>The encoded representation of the <paramref name="value"/>.</returns>
+            public static byte[] GetBytes(string value)
+            {
+                return Encoding.UTF8.GetBytes(value);
+            }
         }
     }
 }
