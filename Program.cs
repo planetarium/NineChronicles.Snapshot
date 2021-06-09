@@ -116,10 +116,6 @@ namespace NineChronicles.Snapshot
             Fork(chainId, forkedId, genesisHash, snapshotTipHash, tip);
 
             _store.SetCanonicalChainId(forkedId);
-            foreach (var id in _store.ListChainIds().Where(id => !id.Equals(forkedId)))
-            {
-                _store.DeleteChainId(id);
-            }
 
             var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
 

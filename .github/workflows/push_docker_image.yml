@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - mono
+      - internal
 
 jobs:
   build_and_push:
@@ -15,7 +16,7 @@ jobs:
       - name: login
         run: docker login --username '${{ secrets.DOCKER_USERNAME }}' --password '${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}'
       - name: build
-        run: docker build . -t planetariumhq/ninechronicles-snapshot:git-${{ github.sha }} -t planetariumhq/ninechronicles-snapshot:latest --build-arg COMMIT=git-${{ github.sha }}
+        run: docker build . -t planetariumhq/ninechronicles-snapshot:git-${{ github.sha }} --build-arg COMMIT=git-${{ github.sha }}
       - name: push git-version
         run: docker push planetariumhq/ninechronicles-snapshot:git-${{ github.sha }}
       - name: push latest
