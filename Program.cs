@@ -4,7 +4,6 @@ using System.Collections.Immutable;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Security.Cryptography;
 using Bencodex.Types;
 using Cocona;
 using Libplanet;
@@ -15,6 +14,7 @@ using Libplanet.Store;
 using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RocksDbSharp;
 
 namespace NineChronicles.Snapshot
 {
@@ -53,6 +53,8 @@ namespace NineChronicles.Snapshot
             var statesPath = Path.Combine(storePath, "states");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
             var txexecPath = Path.Combine(storePath, "txexec");
+
+            PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
 
             _store = new MonoRocksDBStore(storePath);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
@@ -149,6 +151,68 @@ namespace NineChronicles.Snapshot
             {
                 throw new CommandExitedException("Canonical chain doesn't exists.", -1);
             }
+        }
+
+        private void PruneOutdatedColumnFamilies(string path)
+        {
+            var opt = new DbOptions();
+            List<string> cfns = RocksDb.ListColumnFamilies(opt, path).ToList();
+            var cfs = new ColumnFamilies();
+            foreach (string name in cfns)
+            {
+                cfs.Add(name, opt);
+            }
+
+            using RocksDb db = RocksDb.Open(opt, path, cfs);
+            var ccid = new Guid(db.Get(new[] { (byte)'C' }));
+            ColumnFamilyHandle ccf = db.GetColumnFamily(ccid.ToString());
+
+            ColumnFamilyHandle PreviousColumnFamily(ColumnFamilyHandle cfh)
+            {
+                byte[] cid = db.Get(new[] { (byte)'P' }, cfh);
+
+                if (cid is null)
+                {
+                    return null;
+                }
+                else
+                {
+                    return db.GetColumnFamily(new Guid(cid).ToString());
+                }
+            }
+
+            ColumnFamilyHandle cf = PreviousColumnFamily(ccf);
+            var ip = new[] { (byte)'I' };
+            var batch = new WriteBatch();
+            while (!(cf is null))
+            {
+                Iterator it = db.NewIterator(cf);
+                for (it.Seek(ip); it.Valid() && it.Key().StartsWith(ip); it.Next())
+                {
+                    batch.Put(it.Key(), it.Value(), ccf);
+
+                    if (batch.Count() > 10000)
+                    {
+                        db.Write(batch);
+                        batch.Clear();
+                    }
+                }
+
+                cf = PreviousColumnFamily(cf);
+            }
+
+            db.Write(batch);
+
+            foreach (string name in cfns)
+            {
+                if (name == ccid.ToString() || name == "default")
+                {
+                    continue;
+                }
+                db.DropColumnFamily(name);
+            }
+
+            db.Remove(new[] { (byte)'P' }, ccf);
         }
 
         private void Fork(
