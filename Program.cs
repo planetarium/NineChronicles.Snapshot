@@ -68,6 +68,12 @@ namespace NineChronicles.Snapshot
 
             var statesPath = Path.Combine(storePath, "states");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
+            var txexecPath = Path.Combine(storePath, "txexec");
+
+            if (Directory.Exists(txexecPath))
+            {
+                Directory.Delete(txexecPath, true);
+            }
 
             _store = new RocksDBStore(
                 storePath,
