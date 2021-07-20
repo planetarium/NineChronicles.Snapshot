@@ -196,9 +196,7 @@ namespace NineChronicles.Snapshot
                 currentMetadataBlockEpoch,
                 currentMetadataTxEpoch,
                 previousMetadataBlockEpoch,
-                previousMetadataTxEpoch,
-                latestBlockEpoch,
-                latestTxEpoch);
+                latestBlockEpoch);
             var metadataFilename = $"{partitionBaseFilename}.json";
             var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
             if (File.Exists(metadataPath))
@@ -294,11 +292,11 @@ namespace NineChronicles.Snapshot
             // decrease latest epochs by 1 when creating genesis snapshot
             if (currentMetadataBlockEpoch == 0 && currentMetadataTxEpoch == 0)
             {
-                return $"snapshot-{latestBlockEpoch - 1}-{latestTxEpoch - 1}";
+                return $"snapshot-{latestBlockEpoch - 1}-{latestBlockEpoch - 1}";
             }
             else
             {
-                return $"snapshot-{latestBlockEpoch}-{latestTxEpoch}";
+                return $"snapshot-{latestBlockEpoch}-{latestBlockEpoch}";
             }
         }
 
@@ -339,40 +337,30 @@ namespace NineChronicles.Snapshot
             int currentMetadataBlockEpoch,
             int currentMetadataTxEpoch,
             int previousMetadataBlockEpoch,
-            int previousMetadataTxEpoch,
-            int latestBlockEpoch,
-            int latestTxEpoch)
+            int latestBlockEpoch)
         {
             var snapshotTipHeader = snapshotTipDigest.Header;
             JObject jsonObject = JObject.FromObject(snapshotTipHeader);
             jsonObject.Add("APV", apv);
-            jsonObject = AddPreviousBlockEpoch(
+
+            jsonObject = AddPreviousEpochs(
                 jsonObject,
                 currentMetadataBlockEpoch,
-                currentMetadataTxEpoch,
                 previousMetadataBlockEpoch,
                 latestBlockEpoch,
-                latestTxEpoch,
-                "PreviousBlockEpoch");
-            jsonObject = AddPreviousTxEpoch(
-                jsonObject,
-                currentMetadataBlockEpoch,
-                currentMetadataTxEpoch,
-                previousMetadataTxEpoch,
-                latestBlockEpoch,
-                latestTxEpoch,
+                "PreviousBlockEpoch",
                 "PreviousTxEpoch");
 
             // decrease latest epochs by 1 for genesis snapshot
             if (currentMetadataBlockEpoch == 0 && currentMetadataTxEpoch == 0)
             {
                 jsonObject.Add("BlockEpoch", latestBlockEpoch - 1);
-                jsonObject.Add("TxEpoch", latestTxEpoch - 1);
+                jsonObject.Add("TxEpoch", latestBlockEpoch - 1);
             }
             else
             {
                 jsonObject.Add("BlockEpoch", latestBlockEpoch);
-                jsonObject.Add("TxEpoch", latestTxEpoch);
+                jsonObject.Add("TxEpoch", latestBlockEpoch);
             }
 
             return JsonConvert.SerializeObject(jsonObject);
@@ -618,6 +606,28 @@ namespace NineChronicles.Snapshot
                 }
 
                 return jsonObject;
+        }
+
+        private JObject AddPreviousEpochs(
+            JObject jsonObject,
+            int currentMetadataEpoch,
+            int previousMetadataEpoch,
+            int latestEpoch,
+            string blockEpochName,
+            string txEpochName)
+        {
+            if (currentMetadataEpoch == latestEpoch)
+            {
+                jsonObject.Add(blockEpochName, previousMetadataEpoch);
+                jsonObject.Add(txEpochName, previousMetadataEpoch);
+            }
+            else
+            {
+                jsonObject.Add(blockEpochName, currentMetadataEpoch);
+                jsonObject.Add(txEpochName, currentMetadataEpoch);
+            }
+
+            return jsonObject;
         }
 
         private class DummyAction : IAction
