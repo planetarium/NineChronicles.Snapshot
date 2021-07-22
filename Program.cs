@@ -77,7 +77,7 @@ namespace NineChronicles.Snapshot
                 Directory.Delete(txexecPath, true);
             }
 
-            PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
+            PruneOutdatedChains(Path.Combine(storePath, "chain"));
 
             _store = new RocksDBStore(
                 storePath,
@@ -209,54 +209,45 @@ namespace NineChronicles.Snapshot
             Directory.Delete(stateDirectory, true);
         }
 
-        private void PruneOutdatedColumnFamilies(string path)
+        private void PruneOutdatedChains(string path)
         {
-            var opt = new DbOptions();
-            List<string> cfns = RocksDb.ListColumnFamilies(opt, path).ToList();
-            var cfs = new ColumnFamilies();
-            foreach (string name in cfns)
+            using RocksDb db = RocksDb.Open(new DbOptions(), path);
+            var canonicalChanId = new Guid(db.Get(new[] { (byte)'C' }));
+          
+            (Guid, long)? GetPreviousChainInfo(Guid chainId)
             {
-                cfs.Add(name, opt);
+                if (db.Get(new [] { (byte)'P' }.Concat(chainId.ToByteArray()).ToArray()) is { } prevChainId &&
+                    db.Get(new [] { (byte)'p' }.Concat(chainId.ToByteArray()).ToArray()) is { } prevChainIndex)
+                {
+                    return (new Guid(prevChainId), RocksDBStoreBitConverter.ToInt64(prevChainIndex));
+                }
+                return null;
             }
 
-            using RocksDb db = RocksDb.Open(opt, path, cfs);
-            var ccid = new Guid(db.Get(new[] { (byte)'C' }));
-            ColumnFamilyHandle ccf = db.GetColumnFamily(ccid.ToString());
-
-            (ColumnFamilyHandle, long)? PreviousColumnFamily(ColumnFamilyHandle cfh)
-            {
-                byte[] cid = db.Get(new[] { (byte)'P' }, cfh);
-
-                if (cid is null)
-                {
-                    return null;
-                }
-                else
-                {
-                    return (
-                        db.GetColumnFamily(new Guid(cid).ToString()),
-                        RocksDBStoreBitConverter.ToInt64(db.Get(new[] { (byte)'p' }, cfh))
-                    );
-                }
-            }
-
-            var cfInfo = PreviousColumnFamily(ccf);
-            var ip = new[] { (byte)'I' };
+            var previousChainIdWithIndex = GetPreviousChainInfo(canonicalChanId);
             var batch = new WriteBatch();
-            while (cfInfo is { } cfInfoNotNull)
+            while (previousChainIdWithIndex is { } previousChainIdWithIndexNotNull)
             {
-                ColumnFamilyHandle cf = cfInfoNotNull.Item1;
-                long cfi = cfInfoNotNull.Item2;
+                Guid previousChainId = previousChainIdWithIndexNotNull.Item1;
+                long previousChainIndex = previousChainIdWithIndexNotNull.Item2;
+                var prefixIWithChainId = new[] { (byte)'I' }.Concat(previousChainId.ToByteArray()).ToArray();
                 
-                Iterator it = db.NewIterator(cf);
-                for (it.Seek(ip); it.Valid() && it.Key().StartsWith(ip); it.Next())
+                using Iterator it = db.NewIterator();
+                for (it.Seek(prefixIWithChainId); it.Valid() && it.Key().StartsWith(prefixIWithChainId); it.Next())
                 {
-                    long index = RocksDBStoreBitConverter.ToInt64(it.Key().Skip(1).ToArray());
-                    if (index > cfi)
+                    var indexBytes = it.Key().Skip(prefixIWithChainId.Length).ToArray();
+                    long index = RocksDBStoreBitConverter.ToInt64(indexBytes);
+                    if (index > previousChainIndex)
                     {
                         continue;
                     }
-                    batch.Put(it.Key(), it.Value(), ccf);
+                    batch.Put(
+                        new[] { (byte)'I' }
+                            .Concat(canonicalChanId.ToByteArray())
+                            .Concat(indexBytes)
+                            .ToArray(), 
+                        it.Value()
+                        );
 
                     if (batch.Count() > 10000)
                     {
@@ -264,22 +255,33 @@ namespace NineChronicles.Snapshot
                         batch.Clear();
                     }
                 }
-
-                cfInfo = PreviousColumnFamily(cf);
+                previousChainIdWithIndex = GetPreviousChainInfo(previousChainId);
             }
 
             db.Write(batch);
+            batch.Clear();
 
-            foreach (string name in cfns)
+            List<Guid> dropChainIds = new List<Guid>();
             {
-                if (name == ccid.ToString() || name == "default")
+                using Iterator it = db.NewIterator();
+                var chainIdPrefix = new[] {(byte) 'h'};
+                for (it.Seek(chainIdPrefix); it.Valid() && it.Key().StartsWith(chainIdPrefix); it.Next())
                 {
-                    continue;
+                    dropChainIds.Add(new Guid(it.Value()));
                 }
-                db.DropColumnFamily(name);
             }
 
-            db.Remove(new[] { (byte)'P' }, ccf);
+            foreach (var chainId in dropChainIds)
+            {
+                foreach (var prefix in "dPpch".Select(c => new []{(byte) c}.Concat(chainId.ToByteArray()).ToArray()))
+                {
+                    batch.DeleteRange(prefix,(ulong)prefix.Length, prefix, (ulong)prefix.Length);
+                }
+            }
+            db.Write(batch);
+            batch.Clear();
+
+            db.Remove(new[] { (byte)'P' }.Concat(canonicalChanId.ToByteArray()).ToArray());
         }
 
         private string GetPartitionBaseFileName(
