@@ -51,6 +51,7 @@ namespace NineChronicles.Snapshot
             Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
             Directory.CreateDirectory(Path.Combine(outputDirectory, "state"));
             Directory.CreateDirectory(Path.Combine(outputDirectory, "metadata"));
+            Directory.CreateDirectory(Path.Combine(outputDirectory, "full"));
 
             outputDirectory = string.IsNullOrEmpty(outputDirectory)
                 ? Environment.CurrentDirectory
@@ -92,6 +93,8 @@ namespace NineChronicles.Snapshot
             {
                 throw new CommandExitedException("Canonical chain doesn't exist.", -1);
             }
+
+            var genesisHash = _store.IterateIndexes(chainId,0, 1).First();
             var tipHash = _store.IndexBlockHash(chainId, -1) 
                 ?? throw new CommandExitedException("The given chain seems empty.", -1);
             if (!(_store.GetBlockIndex(tipHash) is long tipIndex))
@@ -148,6 +151,12 @@ namespace NineChronicles.Snapshot
                 latestTxEpoch);
             var stateBaseFilename = $"state_latest";
 
+            var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
+            var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
+            var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
+            var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.zip";
+            var fullSnapshotPath = Path.Combine(fullSnapshotDirectory, fullSnapshotFilename);
+
             var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
             var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
             var stateSnapshotFilename = $"{stateBaseFilename}.zip";
@@ -157,6 +166,7 @@ namespace NineChronicles.Snapshot
             CleanStore(
                 partitionSnapshotPath,
                 stateSnapshotPath,
+                fullSnapshotPath,
                 storePath,
                 partitionDirectory,
                 stateDirectory);
@@ -183,6 +193,7 @@ namespace NineChronicles.Snapshot
             CleanPartitionStore(partitionDirectory);
             CleanStateStore(stateDirectory);
 
+            ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
             ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
             ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
             if (snapshotTipDigest is null)
@@ -369,6 +380,7 @@ namespace NineChronicles.Snapshot
         private void CleanStore(
             string partitionSnapshotPath,
             string stateSnapshotPath,
+            string fullSnapshotPath,
             string storePath,
             string partitionDirectory,
             string stateDirectory)
@@ -381,6 +393,11 @@ namespace NineChronicles.Snapshot
             if (File.Exists(stateSnapshotPath))
             {
                 File.Delete(stateSnapshotPath);
+            }
+
+            if (File.Exists(fullSnapshotPath))
+            {
+                File.Delete(fullSnapshotPath);
             }
 
             var cleanDirectories = new[]
