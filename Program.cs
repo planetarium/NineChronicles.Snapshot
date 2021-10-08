@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using Bencodex.Types;
 using Cocona;
@@ -21,8 +22,9 @@ namespace NineChronicles.Snapshot
 {
     class Program
     {
-        private RocksDBStore _store;
+        private IStore _store;
         private TrieStateStore _stateStore;
+        private HashAlgorithmGetter _hashAlgorithmGetter;
 
         static void Main(string[] args)
         {
@@ -80,13 +82,13 @@ namespace NineChronicles.Snapshot
 
             PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
 
+            _hashAlgorithmGetter = (_ => HashAlgorithmType.Of<SHA256>());
             _store = new RocksDBStore(
                 storePath,
                 blockEpochUnitSeconds: blockEpochUnitSeconds,
                 txEpochUnitSeconds: txEpochUnitSeconds);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
-            IKeyValueStore stateHashKeyValueStore = new RocksDBKeyValueStore(stateHashesPath);
-            _stateStore = new TrieStateStore(stateKeyValueStore, stateHashKeyValueStore);
+            _stateStore = new TrieStateStore(stateKeyValueStore);
 
             var canonicalChainId = _store.GetCanonicalChainId();
             if (!(canonicalChainId is Guid chainId))
@@ -104,7 +106,7 @@ namespace NineChronicles.Snapshot
                     -1);
             }
 
-            var tip = _store.GetBlock<DummyAction>(tipHash);
+            var tip = _store.GetBlock<DummyAction>(_hashAlgorithmGetter, tipHash);
             var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
             BlockHash snapshotTipHash;
 
@@ -120,7 +122,7 @@ namespace NineChronicles.Snapshot
                 }
 
                 snapshotTipHash = hash;
-            } while (!_stateStore.ContainsBlockStates(snapshotTipHash));
+            } while (!_stateStore.ContainsStateRoot(_store.GetBlock<DummyAction>(_hashAlgorithmGetter, snapshotTipHash).StateRootHash));
 
             var forkedId = Guid.NewGuid();
 
@@ -133,8 +135,11 @@ namespace NineChronicles.Snapshot
             }
 
             var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
+            var snapshotTipStateRootHash = _store.GetStateRootHash(snapshotTipHash);
 
-            _stateStore.PruneStates(new[] {snapshotTipHash}.ToImmutableHashSet());
+            _stateStore.PruneStates(
+                ImmutableHashSet<HashDigest<SHA256>>.Empty
+                    .Add((HashDigest<SHA256>)snapshotTipStateRootHash));
 
             var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
             var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
@@ -350,7 +355,7 @@ namespace NineChronicles.Snapshot
             int previousMetadataBlockEpoch,
             int latestBlockEpoch)
         {
-            var snapshotTipHeader = snapshotTipDigest.Header;
+            BlockHeader snapshotTipHeader = snapshotTipDigest.GetHeader(_hashAlgorithmGetter);
             JObject jsonObject = JObject.FromObject(snapshotTipHeader);
             jsonObject.Add("APV", apv);
 
@@ -473,7 +478,7 @@ namespace NineChronicles.Snapshot
             BlockHash branchpointHash,
             Block<DummyAction> tip)
         {
-            var branchPoint = _store.GetBlock<DummyAction>(branchpointHash);
+            var branchPoint = _store.GetBlock<DummyAction>(_hashAlgorithmGetter, branchpointHash);
             _store.ForkBlockIndexes(src, dest, branchpointHash);
             _store.ForkTxNonces(src, dest);
 
@@ -481,7 +486,7 @@ namespace NineChronicles.Snapshot
                 Block<DummyAction> block = tip;
                 block.PreviousHash is BlockHash hash
                 && !block.Hash.Equals(branchpointHash);
-                block = _store.GetBlock<DummyAction>(hash))
+                block = _store.GetBlock<DummyAction>(_hashAlgorithmGetter, hash))
             {
                 IEnumerable<(Address, int)> signers = block
                     .Transactions
@@ -515,7 +520,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private Block<T> GetLatestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
+        private Block<T> GetLatestBlockWithTransaction<T>(Block<T> tip, IStore store)
             where T : DummyAction, new()
         {
             var block = tip;
@@ -523,7 +528,7 @@ namespace NineChronicles.Snapshot
             {
                 if (block.PreviousHash is BlockHash newHash)
                 {
-                    block = store.GetBlock<T>(newHash);
+                    block = store.GetBlock<T>(_hashAlgorithmGetter, newHash);
                 }
             }
             return block;
