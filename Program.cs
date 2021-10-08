@@ -22,7 +22,7 @@ namespace NineChronicles.Snapshot
 {
     class Program
     {
-        private IStore _store;
+        private RocksDBStore _store;
         private TrieStateStore _stateStore;
         private HashAlgorithmGetter _hashAlgorithmGetter;
 
