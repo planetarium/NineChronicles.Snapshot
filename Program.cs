@@ -432,6 +432,7 @@ namespace NineChronicles.Snapshot
                 Path.Combine(partitionDirectory, "states"),
                 Path.Combine(partitionDirectory, "chain"),
                 Path.Combine(partitionDirectory, "txexec"),
+                Path.Combine(partitionDirectory, "txbindex"),
                 Path.Combine(partitionDirectory, "block", "blockindex"),
                 Path.Combine(partitionDirectory, "tx", "txindex"),
             };
