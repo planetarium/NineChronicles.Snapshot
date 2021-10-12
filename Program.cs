@@ -521,7 +521,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private Block<T> GetLatestBlockWithTransaction<T>(Block<T> tip, IStore store)
+        private Block<T> GetLatestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
             where T : DummyAction, new()
         {
             var block = tip;
