@@ -65,26 +65,29 @@ namespace NineChronicles.Snapshot
             int previousMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousBlockEpoch");
             int previousMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousTxEpoch");
 
-            storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
-            if (!Directory.Exists(storePath))
+            var tempStorePath = Path.GetTempPath();
+            CloneDirectory(storePath, tempStorePath);
+
+            tempStorePath = string.IsNullOrEmpty(tempStorePath) ? defaultStorePath : tempStorePath;
+            if (!Directory.Exists(tempStorePath))
             {
                 throw new CommandExitedException("Invalid store path. Please check --store-path is valid.", -1);
             }
 
-            var statesPath = Path.Combine(storePath, "states");
-            var stateHashesPath = Path.Combine(storePath, "state_hashes");
-            var txexecPath = Path.Combine(storePath, "txexec");
+            var statesPath = Path.Combine(tempStorePath, "states");
+            var stateHashesPath = Path.Combine(tempStorePath, "state_hashes");
+            var txexecPath = Path.Combine(tempStorePath, "txexec");
 
             if (Directory.Exists(txexecPath))
             {
                 Directory.Delete(txexecPath, true);
             }
 
-            PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
+            PruneOutdatedColumnFamilies(Path.Combine(tempStorePath, "chain"));
 
             _hashAlgorithmGetter = (_ => HashAlgorithmType.Of<SHA256>());
             _store = new RocksDBStore(
-                storePath,
+                tempStorePath,
                 blockEpochUnitSeconds: blockEpochUnitSeconds,
                 txEpochUnitSeconds: txEpochUnitSeconds);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
@@ -172,11 +175,11 @@ namespace NineChronicles.Snapshot
                 partitionSnapshotPath,
                 stateSnapshotPath,
                 fullSnapshotPath,
-                storePath,
+                tempStorePath,
                 partitionDirectory,
                 stateDirectory);
-            CloneDirectory(storePath, partitionDirectory);
-            CloneDirectory(storePath, stateDirectory);
+            CloneDirectory(tempStorePath, partitionDirectory);
+            CloneDirectory(tempStorePath, stateDirectory);
 
             var blockPath = Path.Combine(partitionDirectory, "block");
             var txPath = Path.Combine(partitionDirectory, "tx");
@@ -198,7 +201,7 @@ namespace NineChronicles.Snapshot
             CleanPartitionStore(partitionDirectory);
             CleanStateStore(stateDirectory);
 
-            ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
+            ZipFile.CreateFromDirectory(tempStorePath, fullSnapshotPath);
             ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
             ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
             if (snapshotTipDigest is null)
@@ -223,6 +226,7 @@ namespace NineChronicles.Snapshot
             File.WriteAllText(metadataPath, stringfyMetadata);
             Directory.Delete(partitionDirectory, true);
             Directory.Delete(stateDirectory, true);
+            Directory.Delete(tempStorePath, true);
         }
 
         private void PruneOutdatedColumnFamilies(string path)
