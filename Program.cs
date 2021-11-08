@@ -65,6 +65,7 @@ namespace NineChronicles.Snapshot
             int previousMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousBlockEpoch");
             int previousMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousTxEpoch");
 
+            Console.WriteLine("Copy store to temp path");
             var tempStorePath = Path.GetTempPath();
             CloneDirectory(storePath, tempStorePath);
 
@@ -83,6 +84,7 @@ namespace NineChronicles.Snapshot
                 Directory.Delete(txexecPath, true);
             }
 
+            Console.WriteLine("Prune outdated column families");
             PruneOutdatedColumnFamilies(Path.Combine(tempStorePath, "chain"));
 
             _hashAlgorithmGetter = (_ => HashAlgorithmType.Of<SHA256>());
@@ -129,6 +131,7 @@ namespace NineChronicles.Snapshot
 
             var forkedId = Guid.NewGuid();
 
+            Console.WriteLine("Fork chain");
             Fork(chainId, forkedId, snapshotTipHash, tip);
 
             _store.SetCanonicalChainId(forkedId);
@@ -140,6 +143,7 @@ namespace NineChronicles.Snapshot
             var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
             var snapshotTipStateRootHash = _store.GetStateRootHash(snapshotTipHash);
 
+            Console.WriteLine("Prune states");
             _stateStore.PruneStates(
                 ImmutableHashSet<HashDigest<SHA256>>.Empty
                     .Add((HashDigest<SHA256>)snapshotTipStateRootHash));
@@ -171,6 +175,7 @@ namespace NineChronicles.Snapshot
             var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
             string partitionDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
             string stateDirectory = Path.Combine(Path.GetTempPath(), "state");
+            Console.WriteLine("Clean store");
             CleanStore(
                 partitionSnapshotPath,
                 stateSnapshotPath,
@@ -178,6 +183,7 @@ namespace NineChronicles.Snapshot
                 tempStorePath,
                 partitionDirectory,
                 stateDirectory);
+            Console.WriteLine("Clone partition and state directories");
             CloneDirectory(tempStorePath, partitionDirectory);
             CloneDirectory(tempStorePath, stateDirectory);
 
@@ -198,9 +204,11 @@ namespace NineChronicles.Snapshot
             CleanEpoch(blockPath, blockEpochLimit);
             CleanEpoch(txPath, txEpochLimit);
 
+            Console.WriteLine("Clean partition and state directories");
             CleanPartitionStore(partitionDirectory);
             CleanStateStore(stateDirectory);
 
+            Console.WriteLine("Create zip files");
             ZipFile.CreateFromDirectory(tempStorePath, fullSnapshotPath);
             ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
             ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
@@ -209,6 +217,7 @@ namespace NineChronicles.Snapshot
                 throw new CommandExitedException("Tip does not exist.", -1);
             }
 
+            Console.WriteLine("Create metadata file");
             string stringfyMetadata = CreateMetadata(
                 snapshotTipDigest.Value,
                 apv,
@@ -224,9 +233,11 @@ namespace NineChronicles.Snapshot
             }
 
             File.WriteAllText(metadataPath, stringfyMetadata);
+            Console.WriteLine("Delete directories");
             Directory.Delete(partitionDirectory, true);
             Directory.Delete(stateDirectory, true);
             Directory.Delete(tempStorePath, true);
+            Console.WriteLine("Job complete");
         }
 
         private void PruneOutdatedColumnFamilies(string path)
