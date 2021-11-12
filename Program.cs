@@ -26,6 +26,8 @@ namespace NineChronicles.Snapshot
         private TrieStateStore _stateStore;
         private HashAlgorithmGetter _hashAlgorithmGetter;
 
+        public enum SnapshotType { Full, Partition, All }
+
         static void Main(string[] args)
         {
             CoconaLiteApp.Run<Program>(args);
@@ -37,7 +39,8 @@ namespace NineChronicles.Snapshot
             [Option('o')]
             string outputDirectory = null,
             string storePath = null,
-            int blockBefore = 10)
+            int blockBefore = 10,
+            SnapshotType snapshotType = SnapshotType.Partition)
         {
             // If store changed epoch unit seconds, this will be changed too
             const int blockEpochUnitSeconds = 86400;
@@ -72,12 +75,20 @@ namespace NineChronicles.Snapshot
             }
 
             var statesPath = Path.Combine(storePath, "states");
+            var mainPath = Path.Combine(storePath, "9c-main");
+            var stateRefPath = Path.Combine(storePath, "stateref");
+            var statePath = Path.Combine(storePath, "state");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
             var txexecPath = Path.Combine(storePath, "txexec");
 
-            if (Directory.Exists(txexecPath))
+            var staleDirectories =
+            new [] { mainPath, statePath, stateRefPath, stateHashesPath, txexecPath };
+            foreach (var staleDirectory in staleDirectories)
             {
-                Directory.Delete(txexecPath, true);
+                if (Directory.Exists(staleDirectory))
+                {
+                    Directory.Delete(staleDirectory, true);
+                }
             }
 
             PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
@@ -175,54 +186,63 @@ namespace NineChronicles.Snapshot
                 storePath,
                 partitionDirectory,
                 stateDirectory);
-            CloneDirectory(storePath, partitionDirectory);
-            CloneDirectory(storePath, stateDirectory);
-
-            var blockPath = Path.Combine(partitionDirectory, "block");
-            var txPath = Path.Combine(partitionDirectory, "tx");
-
-            // get epoch limit for block & tx
-            var blockEpochLimit = GetEpochLimit(
-                latestBlockEpoch,
-                currentMetadataBlockEpoch,
-                previousMetadataBlockEpoch);
-            var txEpochLimit = GetEpochLimit(
-                latestTxEpoch,
-                currentMetadataTxEpoch,
-                previousMetadataTxEpoch);
-
-            // clean epoch directories in block & tx
-            CleanEpoch(blockPath, blockEpochLimit);
-            CleanEpoch(txPath, txEpochLimit);
-
-            CleanPartitionStore(partitionDirectory);
-            CleanStateStore(stateDirectory);
-
-            ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
-            ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
-            ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
-            if (snapshotTipDigest is null)
+            if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
             {
-                throw new CommandExitedException("Tip does not exist.", -1);
+                CloneDirectory(storePath, partitionDirectory);
+                CloneDirectory(storePath, stateDirectory);
+                var blockPath = Path.Combine(partitionDirectory, "block");
+                var txPath = Path.Combine(partitionDirectory, "tx");
+
+                // get epoch limit for block & tx
+                var blockEpochLimit = GetEpochLimit(
+                    latestBlockEpoch,
+                    currentMetadataBlockEpoch,
+                    previousMetadataBlockEpoch);
+                var txEpochLimit = GetEpochLimit(
+                    latestTxEpoch,
+                    currentMetadataTxEpoch,
+                    previousMetadataTxEpoch);
+
+                // clean epoch directories in block & tx
+                CleanEpoch(blockPath, blockEpochLimit);
+                CleanEpoch(txPath, txEpochLimit);
+
+                CleanPartitionStore(partitionDirectory);
+                CleanStateStore(stateDirectory);
             }
 
-            string stringfyMetadata = CreateMetadata(
-                snapshotTipDigest.Value,
-                apv,
-                currentMetadataBlockEpoch,
-                currentMetadataTxEpoch,
-                previousMetadataBlockEpoch,
-                latestBlockEpoch);
-            var metadataFilename = $"{partitionBaseFilename}.json";
-            var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
-            if (File.Exists(metadataPath))
+            if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
             {
-                File.Delete(metadataPath);
+                ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
             }
 
-            File.WriteAllText(metadataPath, stringfyMetadata);
-            Directory.Delete(partitionDirectory, true);
-            Directory.Delete(stateDirectory, true);
+            if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
+            {
+                ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
+                ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
+                if (snapshotTipDigest is null)
+                {
+                    throw new CommandExitedException("Tip does not exist.", -1);
+                }
+
+                string stringfyMetadata = CreateMetadata(
+                    snapshotTipDigest.Value,
+                    apv,
+                    currentMetadataBlockEpoch,
+                    currentMetadataTxEpoch,
+                    previousMetadataBlockEpoch,
+                    latestBlockEpoch);
+                var metadataFilename = $"{partitionBaseFilename}.json";
+                var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
+                if (File.Exists(metadataPath))
+                {
+                    File.Delete(metadataPath);
+                }
+
+                File.WriteAllText(metadataPath, stringfyMetadata);
+                Directory.Delete(partitionDirectory, true);
+                Directory.Delete(stateDirectory, true);
+            }
         }
 
         private void PruneOutdatedColumnFamilies(string path)

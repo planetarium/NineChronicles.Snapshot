@@ -11,9 +11,11 @@
 *https://9c-test.s3.ap-northeast-2.amazonaws.com/latest/{genesisHash}-snapshot.json*
 경로에 업로드 해야 합니다.
 
+`--snapshot-type` 옵션을 사용하는 경우, default로 증분 스냅샷이 찍힙니다. 옵션 값으로 `full`을 사용하면, 통 스냅샷으로 찍히며 `all`을 사용하면 증분 & 통 스냅샷이 모두 찍힙니다.
+
 ```
 $ dotnet run -- --help
-Usage: Snapshot [--store-path <String>] [--output-directory <String>] [--block-before <Int32>] [--apv <String>] [--help] [--version]
+Usage: Snapshot [--store-path <String>] [--output-directory <String>] [--block-before <Int32>] [--apv <String>] [--snapshot-type <String>] [--help] [--version]
 
 Snapshot
 
@@ -22,6 +24,7 @@ Options:
   -o, --output-directory <String>     (Default: )
   --store-path <String>               (Default: )
   --block-before <Int32>              (Default: 10)
+  --snapshot-type <String>            (Default: partition)
   -h, --help                         Show help message
   --version                          Show version
 ```
