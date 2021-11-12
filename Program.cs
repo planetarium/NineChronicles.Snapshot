@@ -82,7 +82,7 @@ namespace NineChronicles.Snapshot
             var txexecPath = Path.Combine(storePath, "txexec");
 
             var staleDirectories =
-            new [] { mainPath, statePath, statesPath, stateRefPath, stateHashesPath, txexecPath };
+            new [] { mainPath, statePath, stateRefPath, stateHashesPath, txexecPath };
             foreach (var staleDirectory in staleDirectories)
             {
                 if (Directory.Exists(staleDirectory))
