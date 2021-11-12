@@ -206,6 +206,7 @@ namespace NineChronicles.Snapshot
                 stateDirectory);
             if (snapshotType == "partition" || snapshotType == "all")
             {
+                CloneDirectory(storePath, partitionDirectory);
                 CloneDirectory(storePath, stateDirectory);
                 var blockPath = Path.Combine(partitionDirectory, "block");
                 var txPath = Path.Combine(partitionDirectory, "tx");
