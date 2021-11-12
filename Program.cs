@@ -26,6 +26,8 @@ namespace NineChronicles.Snapshot
         private TrieStateStore _stateStore;
         private HashAlgorithmGetter _hashAlgorithmGetter;
 
+        public enum SnapshotType { Full, Partition, All }
+
         static void Main(string[] args)
         {
             CoconaLiteApp.Run<Program>(args);
@@ -38,7 +40,7 @@ namespace NineChronicles.Snapshot
             string outputDirectory = null,
             string storePath = null,
             int blockBefore = 10,
-            string snapshotType = "partition")
+            SnapshotType snapshotType = SnapshotType.Partition)
         {
             // If store changed epoch unit seconds, this will be changed too
             const int blockEpochUnitSeconds = 86400;
@@ -49,11 +51,6 @@ namespace NineChronicles.Snapshot
                 "planetarium",
                 "9c"
             );
-
-            if (snapshotType != "partition" && snapshotType != "full" && snapshotType != "all")
-            {
-                throw new CommandExitedException("Invalid snapshot type. Please enter either \"partition\", \"full\", or \"all\" for --snapshot-type.", -1);
-            }
 
             Directory.CreateDirectory(outputDirectory);
             Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
@@ -84,29 +81,14 @@ namespace NineChronicles.Snapshot
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
             var txexecPath = Path.Combine(storePath, "txexec");
 
-            if (Directory.Exists(mainPath))
+            var staleDirectories =
+            new [] { mainPath, statePath, statesPath, stateRefPath, stateHashesPath, txexecPath };
+            foreach (var staleDirectory in staleDirectories)
             {
-                Directory.Delete(mainPath, true);
-            }
-
-            if (Directory.Exists(stateRefPath))
-            {
-                Directory.Delete(stateRefPath, true);
-            }
-
-            if (Directory.Exists(statePath))
-            {
-                Directory.Delete(statePath, true);
-            }
-
-            if (Directory.Exists(stateHashesPath))
-            {
-                Directory.Delete(stateHashesPath, true);
-            }
-
-            if (Directory.Exists(txexecPath))
-            {
-                Directory.Delete(txexecPath, true);
+                if (Directory.Exists(staleDirectory))
+                {
+                    Directory.Delete(staleDirectory, true);
+                }
             }
 
             PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
@@ -204,7 +186,7 @@ namespace NineChronicles.Snapshot
                 storePath,
                 partitionDirectory,
                 stateDirectory);
-            if (snapshotType == "partition" || snapshotType == "all")
+            if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
             {
                 CloneDirectory(storePath, partitionDirectory);
                 CloneDirectory(storePath, stateDirectory);
@@ -229,12 +211,12 @@ namespace NineChronicles.Snapshot
                 CleanStateStore(stateDirectory);
             }
 
-            if (snapshotType == "full" || snapshotType == "all")
+            if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
             {
                 ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
             }
 
-            if (snapshotType == "partition" || snapshotType == "all")
+            if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
             {
                 ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
                 ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
