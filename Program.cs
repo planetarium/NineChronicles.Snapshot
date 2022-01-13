@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using Bencodex.Types;
 using Cocona;
 using Libplanet;
@@ -34,7 +35,7 @@ namespace NineChronicles.Snapshot
         }
 
         [Command]
-        public void Snapshot(
+        public async void Snapshot(
             string apv,
             [Option('o')]
             string outputDirectory = null,
@@ -78,6 +79,7 @@ namespace NineChronicles.Snapshot
             var mainPath = Path.Combine(storePath, "9c-main");
             var stateRefPath = Path.Combine(storePath, "stateref");
             var statePath = Path.Combine(storePath, "state");
+            var newStatesPath = Path.Combine(storePath, "new_states");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
             var txexecPath = Path.Combine(storePath, "txexec");
 
@@ -99,7 +101,9 @@ namespace NineChronicles.Snapshot
                 blockEpochUnitSeconds: blockEpochUnitSeconds,
                 txEpochUnitSeconds: txEpochUnitSeconds);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
+            IKeyValueStore newStateKeyValueStore = new RocksDBKeyValueStore(newStatesPath);
             _stateStore = new TrieStateStore(stateKeyValueStore);
+            var newStateStore = new TrieStateStore(newStateKeyValueStore);
 
             var canonicalChainId = _store.GetCanonicalChainId();
             if (!(canonicalChainId is Guid chainId))
@@ -148,9 +152,8 @@ namespace NineChronicles.Snapshot
             var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
             var snapshotTipStateRootHash = _store.GetStateRootHash(snapshotTipHash);
 
-            _stateStore.PruneStates(
-                ImmutableHashSet<HashDigest<SHA256>>.Empty
-                    .Add((HashDigest<SHA256>)snapshotTipStateRootHash));
+            _stateStore.CopyStates(ImmutableHashSet<HashDigest<SHA256>>.Empty
+                .Add((HashDigest<SHA256>)snapshotTipStateRootHash), newStateStore);
 
             var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
             var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
@@ -159,6 +162,9 @@ namespace NineChronicles.Snapshot
 
             _store.Dispose();
             _stateStore.Dispose();
+
+            Directory.Delete(statesPath, recursive: true);
+            Directory.Move(newStatesPath, statesPath);
 
             var partitionBaseFilename = GetPartitionBaseFileName(
                 currentMetadataBlockEpoch,
