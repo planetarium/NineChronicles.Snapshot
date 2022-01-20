@@ -35,7 +35,7 @@ namespace NineChronicles.Snapshot
         }
 
         [Command]
-        public async void Snapshot(
+        public void Snapshot(
             string apv,
             [Option('o')]
             string outputDirectory = null,
@@ -194,8 +194,6 @@ namespace NineChronicles.Snapshot
                 stateDirectory);
             if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
             {
-                CloneDirectory(storePath, partitionDirectory);
-                CloneDirectory(storePath, stateDirectory);
                 var blockPath = Path.Combine(partitionDirectory, "block");
                 var txPath = Path.Combine(partitionDirectory, "tx");
 
@@ -208,47 +206,67 @@ namespace NineChronicles.Snapshot
                     latestTxEpoch,
                     currentMetadataTxEpoch,
                     previousMetadataTxEpoch);
+                Task.WaitAll(
+                    Task.Run(() =>
+                    {
+                        CloneDirectory(storePath, partitionDirectory);
+                        CleanPartitionStore(partitionDirectory);
 
-                // clean epoch directories in block & tx
-                CleanEpoch(blockPath, blockEpochLimit);
-                CleanEpoch(txPath, txEpochLimit);
-
-                CleanPartitionStore(partitionDirectory);
-                CleanStateStore(stateDirectory);
+                        // clean epoch directories in block & tx
+                        CleanEpoch(blockPath, blockEpochLimit);
+                        CleanEpoch(txPath, txEpochLimit);
+                    }),
+                    Task.Run(() =>
+                    {
+                        CloneDirectory(storePath, stateDirectory);
+                        CleanStateStore(stateDirectory);
+                    }));
             }
 
+            var tasks = new List<Task>();
             if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
             {
-                ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
+                tasks.Add(Task.Run(() => ZipFile.CreateFromDirectory(storePath, fullSnapshotPath)));
             }
 
             if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
             {
-                ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
-                ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
-                if (snapshotTipDigest is null)
+                tasks.Add(Task.Run(() =>
                 {
-                    throw new CommandExitedException("Tip does not exist.", -1);
-                }
-
-                string stringfyMetadata = CreateMetadata(
-                    snapshotTipDigest.Value,
-                    apv,
-                    currentMetadataBlockEpoch,
-                    currentMetadataTxEpoch,
-                    previousMetadataBlockEpoch,
-                    latestBlockEpoch);
-                var metadataFilename = $"{partitionBaseFilename}.json";
-                var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
-                if (File.Exists(metadataPath))
+                    ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
+                    Directory.Delete(partitionDirectory, true);
+                }));
+                tasks.Add(Task.Run(() =>
                 {
-                    File.Delete(metadataPath);
-                }
+                    ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
+                    Directory.Delete(stateDirectory, true);
+                }));
+                tasks.Add(Task.Run(() =>
+                {
+                    if (snapshotTipDigest is null)
+                    {
+                        throw new CommandExitedException("Tip does not exist.", -1);
+                    }
 
-                File.WriteAllText(metadataPath, stringfyMetadata);
-                Directory.Delete(partitionDirectory, true);
-                Directory.Delete(stateDirectory, true);
+                    string stringfyMetadata = CreateMetadata(
+                        snapshotTipDigest.Value,
+                        apv,
+                        currentMetadataBlockEpoch,
+                        currentMetadataTxEpoch,
+                        previousMetadataBlockEpoch,
+                        latestBlockEpoch);
+                    var metadataFilename = $"{partitionBaseFilename}.json";
+                    var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
+                    if (File.Exists(metadataPath))
+                    {
+                        File.Delete(metadataPath);
+                    }
+
+                    File.WriteAllText(metadataPath, stringfyMetadata);
+                }));
             }
+
+            Task.WaitAll(tasks.ToArray());
         }
 
         private void PruneOutdatedColumnFamilies(string path)
