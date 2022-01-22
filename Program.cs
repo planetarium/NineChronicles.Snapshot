@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using Bencodex.Types;
 using Cocona;
 using Libplanet;
@@ -78,6 +79,7 @@ namespace NineChronicles.Snapshot
             var mainPath = Path.Combine(storePath, "9c-main");
             var stateRefPath = Path.Combine(storePath, "stateref");
             var statePath = Path.Combine(storePath, "state");
+            var newStatesPath = Path.Combine(storePath, "new_states");
             var stateHashesPath = Path.Combine(storePath, "state_hashes");
             var txexecPath = Path.Combine(storePath, "txexec");
 
@@ -99,7 +101,9 @@ namespace NineChronicles.Snapshot
                 blockEpochUnitSeconds: blockEpochUnitSeconds,
                 txEpochUnitSeconds: txEpochUnitSeconds);
             IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
+            IKeyValueStore newStateKeyValueStore = new RocksDBKeyValueStore(newStatesPath);
             _stateStore = new TrieStateStore(stateKeyValueStore);
+            var newStateStore = new TrieStateStore(newStateKeyValueStore);
 
             var canonicalChainId = _store.GetCanonicalChainId();
             if (!(canonicalChainId is Guid chainId))
@@ -148,9 +152,8 @@ namespace NineChronicles.Snapshot
             var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
             var snapshotTipStateRootHash = _store.GetStateRootHash(snapshotTipHash);
 
-            _stateStore.PruneStates(
-                ImmutableHashSet<HashDigest<SHA256>>.Empty
-                    .Add((HashDigest<SHA256>)snapshotTipStateRootHash));
+            _stateStore.CopyStates(ImmutableHashSet<HashDigest<SHA256>>.Empty
+                .Add((HashDigest<SHA256>)snapshotTipStateRootHash), newStateStore);
 
             var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
             var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
@@ -159,6 +162,9 @@ namespace NineChronicles.Snapshot
 
             _store.Dispose();
             _stateStore.Dispose();
+
+            Directory.Delete(statesPath, recursive: true);
+            Directory.Move(newStatesPath, statesPath);
 
             var partitionBaseFilename = GetPartitionBaseFileName(
                 currentMetadataBlockEpoch,
@@ -188,8 +194,6 @@ namespace NineChronicles.Snapshot
                 stateDirectory);
             if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
             {
-                CloneDirectory(storePath, partitionDirectory);
-                CloneDirectory(storePath, stateDirectory);
                 var blockPath = Path.Combine(partitionDirectory, "block");
                 var txPath = Path.Combine(partitionDirectory, "tx");
 
@@ -202,47 +206,67 @@ namespace NineChronicles.Snapshot
                     latestTxEpoch,
                     currentMetadataTxEpoch,
                     previousMetadataTxEpoch);
+                Task.WaitAll(
+                    Task.Run(() =>
+                    {
+                        CloneDirectory(storePath, partitionDirectory);
+                        CleanPartitionStore(partitionDirectory);
 
-                // clean epoch directories in block & tx
-                CleanEpoch(blockPath, blockEpochLimit);
-                CleanEpoch(txPath, txEpochLimit);
-
-                CleanPartitionStore(partitionDirectory);
-                CleanStateStore(stateDirectory);
+                        // clean epoch directories in block & tx
+                        CleanEpoch(blockPath, blockEpochLimit);
+                        CleanEpoch(txPath, txEpochLimit);
+                    }),
+                    Task.Run(() =>
+                    {
+                        CloneDirectory(storePath, stateDirectory);
+                        CleanStateStore(stateDirectory);
+                    }));
             }
 
+            var tasks = new List<Task>();
             if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
             {
-                ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
+                tasks.Add(Task.Run(() => ZipFile.CreateFromDirectory(storePath, fullSnapshotPath)));
             }
 
             if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
             {
-                ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
-                ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
-                if (snapshotTipDigest is null)
+                tasks.Add(Task.Run(() =>
                 {
-                    throw new CommandExitedException("Tip does not exist.", -1);
-                }
-
-                string stringfyMetadata = CreateMetadata(
-                    snapshotTipDigest.Value,
-                    apv,
-                    currentMetadataBlockEpoch,
-                    currentMetadataTxEpoch,
-                    previousMetadataBlockEpoch,
-                    latestBlockEpoch);
-                var metadataFilename = $"{partitionBaseFilename}.json";
-                var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
-                if (File.Exists(metadataPath))
+                    ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
+                    Directory.Delete(partitionDirectory, true);
+                }));
+                tasks.Add(Task.Run(() =>
                 {
-                    File.Delete(metadataPath);
-                }
+                    ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
+                    Directory.Delete(stateDirectory, true);
+                }));
+                tasks.Add(Task.Run(() =>
+                {
+                    if (snapshotTipDigest is null)
+                    {
+                        throw new CommandExitedException("Tip does not exist.", -1);
+                    }
 
-                File.WriteAllText(metadataPath, stringfyMetadata);
-                Directory.Delete(partitionDirectory, true);
-                Directory.Delete(stateDirectory, true);
+                    string stringfyMetadata = CreateMetadata(
+                        snapshotTipDigest.Value,
+                        apv,
+                        currentMetadataBlockEpoch,
+                        currentMetadataTxEpoch,
+                        previousMetadataBlockEpoch,
+                        latestBlockEpoch);
+                    var metadataFilename = $"{partitionBaseFilename}.json";
+                    var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
+                    if (File.Exists(metadataPath))
+                    {
+                        File.Delete(metadataPath);
+                    }
+
+                    File.WriteAllText(metadataPath, stringfyMetadata);
+                }));
             }
+
+            Task.WaitAll(tasks.ToArray());
         }
 
         private void PruneOutdatedColumnFamilies(string path)
