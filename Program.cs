@@ -214,7 +214,7 @@ namespace NineChronicles.Snapshot
 
                         // clean epoch directories in block & tx
                         CleanEpoch(blockPath, blockEpochLimit);
-                        CleanEpoch(txPath, txEpochLimit);
+                        CleanEpoch(txPath, blockEpochLimit);
                     }),
                     Task.Run(() =>
                     {
