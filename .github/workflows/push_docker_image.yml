@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - mono
+      - fix/tx-dir-partitioning
 
 jobs:
   build_and_push:
