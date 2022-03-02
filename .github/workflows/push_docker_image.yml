@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - mono
+      - v120-fix
 
 jobs:
   build_and_push:
