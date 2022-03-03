@@ -206,10 +206,14 @@ namespace NineChronicles.Snapshot
                 Console.WriteLine("Clean Store Done. Time Taken: {0}", (end - start).Minutes);
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
-                    Console.WriteLine("Clone Directory Start.");
+                    Console.WriteLine("Clone Partition Directory Start.");
                     start = DateTimeOffset.Now;
-                    CloneDirectory(storePath, partitionDirectory);
-                    CloneDirectory(storePath, stateDirectory);
+                    CopyDirectory(storePath, partitionDirectory, true);
+                    end = DateTimeOffset.Now;
+                    Console.WriteLine("Clone Partition Directory Done. Time Taken: {0}", (end - start).Minutes);
+                    Console.WriteLine("Clone State Directory Start.");
+                    start = DateTimeOffset.Now;
+                    CopyDirectory(storePath, stateDirectory, true);
                     end = DateTimeOffset.Now;
                     Console.WriteLine("Clone Directory Done. Time Taken: {0}", (end - start).Minutes);
                     var blockPath = Path.Combine(partitionDirectory, "block");
@@ -608,6 +612,39 @@ namespace NineChronicles.Snapshot
             }
         }
 
+        private void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
+        {
+            // Get information about the source directory
+            var dir = new DirectoryInfo(sourceDir);
+
+            // Check if the source directory exists
+            if (!dir.Exists)
+                throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+
+            // Cache directories before we start copying
+            DirectoryInfo[] dirs = dir.GetDirectories();
+
+            // Create the destination directory
+            Directory.CreateDirectory(destinationDir);
+
+            // Get the files in the source directory and copy to the destination directory
+            foreach (FileInfo file in dir.GetFiles())
+            {
+                string targetFilePath = Path.Combine(destinationDir, file.Name);
+                file.CopyTo(targetFilePath);
+            }
+
+            // If recursive and copying subdirectories, recursively call this method
+            if (recursive)
+            {
+                foreach (DirectoryInfo subDir in dirs)
+                {
+                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                    CopyDirectory(subDir.FullName, newDestinationDir, true);
+                }
+            }
+        }
+        
         private void CleanEpoch(string path, int epochLimit)
         {
             string[] directories = Directory.GetDirectories(
