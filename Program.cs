@@ -222,11 +222,6 @@ namespace NineChronicles.Snapshot
                     end = DateTimeOffset.Now;
                     Console.WriteLine("Clone Partition Directory Done. Time Taken(min): {0}", (end - start).Minutes);
                     Thread.Sleep(10000);
-                    Console.WriteLine("Clone State Directory Start.");
-                    start = DateTimeOffset.Now;
-                    CopyDirectory(storePath, stateDirectory, true);
-                    end = DateTimeOffset.Now;
-                    Console.WriteLine("Clone State Directory Done. Time Taken(min): {0}", (end - start).Minutes);
                     var blockPath = Path.Combine(partitionDirectory, "block");
                     var txPath = Path.Combine(partitionDirectory, "tx");
 
@@ -240,16 +235,27 @@ namespace NineChronicles.Snapshot
                         currentMetadataTxEpoch,
                         previousMetadataTxEpoch);
 
-                    Console.WriteLine("Clean Stores Start.");
+                    Console.WriteLine("Clean Partition Store Start.");
                     start = DateTimeOffset.Now;
                     // clean epoch directories in block & tx
                     CleanEpoch(blockPath, blockEpochLimit);
                     CleanEpoch(txPath, txEpochLimit);
 
                     CleanPartitionStore(partitionDirectory);
+                    end = DateTimeOffset.Now;
+                    Console.WriteLine("Clean Partition Store Done. Time Taken(min): {0}", (end - start).Minutes);
+
+                    Console.WriteLine("Clone State Directory Start.");
+                    start = DateTimeOffset.Now;
+                    CopyDirectory(storePath, stateDirectory, true);
+                    end = DateTimeOffset.Now;
+                    Console.WriteLine("Clone State Directory Done. Time Taken(min): {0}", (end - start).Minutes);
+
+                    Console.WriteLine("Clean State Store Start.");
+                    start = DateTimeOffset.Now;
                     CleanStateStore(stateDirectory);
                     end = DateTimeOffset.Now;
-                    Console.WriteLine("Clean Stores Done. Time Taken(min): {0}", (end - start).Minutes);
+                    Console.WriteLine("Clean State Store Done. Time Taken(min): {0}", (end - start).Minutes);
                 }
                 
                 if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
