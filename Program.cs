@@ -197,6 +197,14 @@ namespace NineChronicles.Snapshot
                 var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
                 string partitionDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
                 string stateDirectory = Path.Combine(Path.GetTempPath(), "state");
+                if (Directory.Exists(partitionDirectory))
+                {
+                    Directory.Delete(partitionDirectory, true);
+                }
+                if (Directory.Exists(stateDirectory))
+                {
+                    Directory.Delete(stateDirectory, true);
+                }
                 Console.WriteLine("Clean Store Start.");
                 start = DateTimeOffset.Now;
                 CleanStore(
@@ -218,7 +226,7 @@ namespace NineChronicles.Snapshot
                     start = DateTimeOffset.Now;
                     CopyDirectory(storePath, stateDirectory, true);
                     end = DateTimeOffset.Now;
-                    Console.WriteLine("Clone Directory Done. Time Taken(min): {0}", (end - start).Minutes);
+                    Console.WriteLine("Clone State Directory Done. Time Taken(min): {0}", (end - start).Minutes);
                     var blockPath = Path.Combine(partitionDirectory, "block");
                     var txPath = Path.Combine(partitionDirectory, "tx");
 
@@ -617,34 +625,41 @@ namespace NineChronicles.Snapshot
 
         private void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
         {
-            // Get information about the source directory
-            var dir = new DirectoryInfo(sourceDir);
-
-            // Check if the source directory exists
-            if (!dir.Exists)
-                throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
-
-            // Cache directories before we start copying
-            DirectoryInfo[] dirs = dir.GetDirectories();
-
-            // Create the destination directory
-            Directory.CreateDirectory(destinationDir);
-
-            // Get the files in the source directory and copy to the destination directory
-            foreach (FileInfo file in dir.GetFiles())
+            try
             {
-                string targetFilePath = Path.Combine(destinationDir, file.Name);
-                file.CopyTo(targetFilePath);
-            }
+                // Get information about the source directory
+                var dir = new DirectoryInfo(sourceDir);
 
-            // If recursive and copying subdirectories, recursively call this method
-            if (recursive)
-            {
-                foreach (DirectoryInfo subDir in dirs)
+                // Check if the source directory exists
+                if (!dir.Exists)
+                    throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+
+                // Cache directories before we start copying
+                DirectoryInfo[] dirs = dir.GetDirectories();
+
+                // Create the destination directory
+                Directory.CreateDirectory(destinationDir);
+
+                // Get the files in the source directory and copy to the destination directory
+                foreach (FileInfo file in dir.GetFiles())
                 {
-                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                    CopyDirectory(subDir.FullName, newDestinationDir, true);
+                    string targetFilePath = Path.Combine(destinationDir, file.Name);
+                    file.CopyTo(targetFilePath);
                 }
+
+                // If recursive and copying subdirectories, recursively call this method
+                if (recursive)
+                {
+                    foreach (DirectoryInfo subDir in dirs)
+                    {
+                        string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                        CopyDirectory(subDir.FullName, newDestinationDir, true);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
             }
         }
         
