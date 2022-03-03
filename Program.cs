@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Bencodex.Types;
 using Cocona;
@@ -212,6 +213,7 @@ namespace NineChronicles.Snapshot
                     CopyDirectory(storePath, partitionDirectory, true);
                     end = DateTimeOffset.Now;
                     Console.WriteLine("Clone Partition Directory Done. Time Taken(min): {0}", (end - start).Minutes);
+                    Thread.Sleep(10000);
                     Console.WriteLine("Clone State Directory Start.");
                     start = DateTimeOffset.Now;
                     CopyDirectory(storePath, stateDirectory, true);
