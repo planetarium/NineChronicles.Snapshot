@@ -201,9 +201,7 @@ namespace NineChronicles.Snapshot
                     partitionSnapshotPath,
                     stateSnapshotPath,
                     fullSnapshotPath,
-                    storePath,
-                    partitionDirectory,
-                    stateDirectory);
+                    storePath);
                 end = DateTimeOffset.Now;
                 Console.WriteLine("Clean Store Done. Time Taken: {0}", (end - start).Minutes);
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
@@ -447,9 +445,7 @@ namespace NineChronicles.Snapshot
             string partitionSnapshotPath,
             string stateSnapshotPath,
             string fullSnapshotPath,
-            string storePath,
-            string partitionDirectory,
-            string stateDirectory)
+            string storePath)
         {
             if (File.Exists(partitionSnapshotPath))
             {
@@ -469,9 +465,7 @@ namespace NineChronicles.Snapshot
             var cleanDirectories = new[]
             {
                 Path.Combine(storePath, "blockpercept"),
-                Path.Combine(storePath, "stagedtx"),
-                partitionDirectory,
-                stateDirectory
+                Path.Combine(storePath, "stagedtx")
             };
 
             foreach (var path in cleanDirectories)
