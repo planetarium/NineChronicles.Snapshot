@@ -159,7 +159,7 @@ namespace NineChronicles.Snapshot
                 _stateStore.CopyStates(ImmutableHashSet<HashDigest<SHA256>>.Empty
                     .Add((HashDigest<SHA256>)snapshotTipStateRootHash), newStateStore);
                 var end = DateTimeOffset.Now;
-                Console.WriteLine("CopyStates Done. Time Taken: {0}", (end - start).Minutes);
+                Console.WriteLine("CopyStates Done. Time Taken(min): {0}", (end - start).Minutes);
 
                 var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
                 var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
@@ -168,13 +168,14 @@ namespace NineChronicles.Snapshot
 
                 _store.Dispose();
                 _stateStore.Dispose();
+                newStateKeyValueStore.Dispose();
 
                 Console.WriteLine("Move States Start.");
                 start = DateTimeOffset.Now;
                 Directory.Delete(statesPath, recursive: true);
                 Directory.Move(newStatesPath, statesPath);
                 end = DateTimeOffset.Now;
-                Console.WriteLine("Move States Done. Time Taken: {0}", (end - start).Minutes);
+                Console.WriteLine("Move States Done. Time Taken(min): {0}", (end - start).Minutes);
 
                 var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
@@ -203,19 +204,19 @@ namespace NineChronicles.Snapshot
                     fullSnapshotPath,
                     storePath);
                 end = DateTimeOffset.Now;
-                Console.WriteLine("Clean Store Done. Time Taken: {0}", (end - start).Minutes);
+                Console.WriteLine("Clean Store Done. Time Taken(min): {0}", (end - start).Minutes);
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
                     Console.WriteLine("Clone Partition Directory Start.");
                     start = DateTimeOffset.Now;
                     CopyDirectory(storePath, partitionDirectory, true);
                     end = DateTimeOffset.Now;
-                    Console.WriteLine("Clone Partition Directory Done. Time Taken: {0}", (end - start).Minutes);
+                    Console.WriteLine("Clone Partition Directory Done. Time Taken(min): {0}", (end - start).Minutes);
                     Console.WriteLine("Clone State Directory Start.");
                     start = DateTimeOffset.Now;
                     CopyDirectory(storePath, stateDirectory, true);
                     end = DateTimeOffset.Now;
-                    Console.WriteLine("Clone Directory Done. Time Taken: {0}", (end - start).Minutes);
+                    Console.WriteLine("Clone Directory Done. Time Taken(min): {0}", (end - start).Minutes);
                     var blockPath = Path.Combine(partitionDirectory, "block");
                     var txPath = Path.Combine(partitionDirectory, "tx");
 
@@ -238,7 +239,7 @@ namespace NineChronicles.Snapshot
                     CleanPartitionStore(partitionDirectory);
                     CleanStateStore(stateDirectory);
                     end = DateTimeOffset.Now;
-                    Console.WriteLine("Clean Stores Done. Time Taken: {0}", (end - start).Minutes);
+                    Console.WriteLine("Clean Stores Done. Time Taken(min): {0}", (end - start).Minutes);
                 }
                 
                 if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
@@ -252,12 +253,12 @@ namespace NineChronicles.Snapshot
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
                     end = DateTimeOffset.Now;
-                    Console.WriteLine("Create Partition ZipFile Done. Time Taken: {0}", (end - start).Minutes);
+                    Console.WriteLine("Create Partition ZipFile Done. Time Taken(min): {0}", (end - start).Minutes);
                     Console.WriteLine("Create State ZipFile Start.");
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
                     end = DateTimeOffset.Now;
-                    Console.WriteLine("Create State Zipfile Done. Time Taken: {0}", (end - start).Minutes);
+                    Console.WriteLine("Create State Zipfile Done. Time Taken(min): {0}", (end - start).Minutes);
                     if (snapshotTipDigest is null)
                     {
                         throw new CommandExitedException("Tip does not exist.", -1);
