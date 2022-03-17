@@ -162,6 +162,7 @@ namespace NineChronicles.Snapshot
 
             _store.Dispose();
             _stateStore.Dispose();
+            newStateKeyValueStore.Dispose();
 
             Directory.Delete(statesPath, recursive: true);
             Directory.Move(newStatesPath, statesPath);
