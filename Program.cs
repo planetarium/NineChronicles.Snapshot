@@ -153,6 +153,9 @@ namespace NineChronicles.Snapshot
                 var forkedId = Guid.NewGuid();
 
                 Fork(chainId, forkedId, snapshotTipHash, tip);
+                _store.Dispose();
+                _stateStore.Dispose();
+                newStateKeyValueStore.Dispose();
 
                 _store.SetCanonicalChainId(forkedId);
                 foreach (var id in _store.ListChainIds().Where(id => !id.Equals(forkedId)))
