@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Bencodex.Types;
 using Cocona;
@@ -18,6 +19,8 @@ using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RocksDbSharp;
+using System.Net;
+using System.Collections.Specialized;
 
 namespace NineChronicles.Snapshot
 {
@@ -43,207 +46,319 @@ namespace NineChronicles.Snapshot
             int blockBefore = 10,
             SnapshotType snapshotType = SnapshotType.Partition)
         {
-            // If store changed epoch unit seconds, this will be changed too
-            const int blockEpochUnitSeconds = 86400;
-            const int txEpochUnitSeconds = 86400;
-            
-            string defaultStorePath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "planetarium",
-                "9c"
-            );
-
-            Directory.CreateDirectory(outputDirectory);
-            Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
-            Directory.CreateDirectory(Path.Combine(outputDirectory, "state"));
-            Directory.CreateDirectory(Path.Combine(outputDirectory, "metadata"));
-            Directory.CreateDirectory(Path.Combine(outputDirectory, "full"));
-
-            outputDirectory = string.IsNullOrEmpty(outputDirectory)
-                ? Environment.CurrentDirectory
-                : outputDirectory;
-
-            var metadataDirectory = Path.Combine(outputDirectory, "metadata");
-            int currentMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "BlockEpoch");
-            int currentMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "TxEpoch");
-            int previousMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousBlockEpoch");
-            int previousMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousTxEpoch");
-
-            storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
-            if (!Directory.Exists(storePath))
+            try
             {
-                throw new CommandExitedException("Invalid store path. Please check --store-path is valid.", -1);
-            }
+                var wb = new WebClient();
+                var data = String.Format("Create Snapshot-{0} start.", snapshotType.ToString());
+                string url =
+                    "https://planetariumhq.slack.com/services/hooks/slackbot?token=4hBLriaHECDGHlNNbOnwjkfk&channel=%23snapshot-monitoring";
+                var response = wb.UploadString(url, "POST", data);
+                Console.WriteLine(response);
+                // If store changed epoch unit seconds, this will be changed too
+                const int blockEpochUnitSeconds = 86400;
+                const int txEpochUnitSeconds = 86400;
+                
+                string defaultStorePath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "planetarium",
+                    "9c"
+                );
 
-            var statesPath = Path.Combine(storePath, "states");
-            var mainPath = Path.Combine(storePath, "9c-main");
-            var stateRefPath = Path.Combine(storePath, "stateref");
-            var statePath = Path.Combine(storePath, "state");
-            var newStatesPath = Path.Combine(storePath, "new_states");
-            var stateHashesPath = Path.Combine(storePath, "state_hashes");
-            var txexecPath = Path.Combine(storePath, "txexec");
+                Directory.CreateDirectory(outputDirectory);
+                Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
+                Directory.CreateDirectory(Path.Combine(outputDirectory, "state"));
+                Directory.CreateDirectory(Path.Combine(outputDirectory, "metadata"));
+                Directory.CreateDirectory(Path.Combine(outputDirectory, "full"));
 
-            var staleDirectories =
-            new [] { mainPath, statePath, stateRefPath, stateHashesPath, txexecPath };
-            foreach (var staleDirectory in staleDirectories)
-            {
-                if (Directory.Exists(staleDirectory))
+                outputDirectory = string.IsNullOrEmpty(outputDirectory)
+                    ? Environment.CurrentDirectory
+                    : outputDirectory;
+
+                var metadataDirectory = Path.Combine(outputDirectory, "metadata");
+                int currentMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "BlockEpoch");
+                int currentMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "TxEpoch");
+                int previousMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousBlockEpoch");
+                int previousMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousTxEpoch");
+
+                storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
+                if (!Directory.Exists(storePath))
                 {
-                    Directory.Delete(staleDirectory, true);
+                    throw new CommandExitedException("Invalid store path. Please check --store-path is valid.", -1);
                 }
-            }
 
-            PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
+                var statesPath = Path.Combine(storePath, "states");
+                var mainPath = Path.Combine(storePath, "9c-main");
+                var stateRefPath = Path.Combine(storePath, "stateref");
+                var statePath = Path.Combine(storePath, "state");
+                var newStatesPath = Path.Combine(storePath, "new_states");
+                var stateHashesPath = Path.Combine(storePath, "state_hashes");
+                var txexecPath = Path.Combine(storePath, "txexec");
 
-            _hashAlgorithmGetter = (_ => HashAlgorithmType.Of<SHA256>());
-            _store = new RocksDBStore(
-                storePath,
-                blockEpochUnitSeconds: blockEpochUnitSeconds,
-                txEpochUnitSeconds: txEpochUnitSeconds);
-            IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
-            IKeyValueStore newStateKeyValueStore = new RocksDBKeyValueStore(newStatesPath);
-            _stateStore = new TrieStateStore(stateKeyValueStore);
-            var newStateStore = new TrieStateStore(newStateKeyValueStore);
+                var staleDirectories =
+                new [] { mainPath, statePath, stateRefPath, stateHashesPath, txexecPath };
+                foreach (var staleDirectory in staleDirectories)
+                {
+                    if (Directory.Exists(staleDirectory))
+                    {
+                        Directory.Delete(staleDirectory, true);
+                    }
+                }
 
-            var canonicalChainId = _store.GetCanonicalChainId();
-            if (!(canonicalChainId is Guid chainId))
-            {
-                throw new CommandExitedException("Canonical chain doesn't exist.", -1);
-            }
+                PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
 
-            var genesisHash = _store.IterateIndexes(chainId,0, 1).First();
-            var tipHash = _store.IndexBlockHash(chainId, -1) 
-                ?? throw new CommandExitedException("The given chain seems empty.", -1);
-            if (!(_store.GetBlockIndex(tipHash) is long tipIndex))
-            {
-                throw new CommandExitedException(
-                    $"The index of {tipHash} doesn't exist.",
-                    -1);
-            }
+                _hashAlgorithmGetter = (_ => HashAlgorithmType.Of<SHA256>());
+                _store = new RocksDBStore(
+                    storePath,
+                    blockEpochUnitSeconds: blockEpochUnitSeconds,
+                    txEpochUnitSeconds: txEpochUnitSeconds);
+                IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
+                IKeyValueStore newStateKeyValueStore = new RocksDBKeyValueStore(newStatesPath);
+                _stateStore = new TrieStateStore(stateKeyValueStore);
+                var newStateStore = new TrieStateStore(newStateKeyValueStore);
 
-            var tip = _store.GetBlock<DummyAction>(_hashAlgorithmGetter, tipHash);
-            var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
-            BlockHash snapshotTipHash;
+                var canonicalChainId = _store.GetCanonicalChainId();
+                if (!(canonicalChainId is Guid chainId))
+                {
+                    throw new CommandExitedException("Canonical chain doesn't exist.", -1);
+                }
 
-            do
-            {
-                snapshotTipIndex++;
-
-                if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is BlockHash hash))
+                var genesisHash = _store.IterateIndexes(chainId,0, 1).First();
+                var tipHash = _store.IndexBlockHash(chainId, -1) 
+                    ?? throw new CommandExitedException("The given chain seems empty.", -1);
+                if (!(_store.GetBlockIndex(tipHash) is long tipIndex))
                 {
                     throw new CommandExitedException(
-                        $"The index {snapshotTipIndex} doesn't exist on ${chainId}.",
+                        $"The index of {tipHash} doesn't exist.",
                         -1);
                 }
 
-                snapshotTipHash = hash;
-            } while (!_stateStore.ContainsStateRoot(_store.GetBlock<DummyAction>(_hashAlgorithmGetter, snapshotTipHash).StateRootHash));
+                var tip = _store.GetBlock<DummyAction>(_hashAlgorithmGetter, tipHash);
+                var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
+                BlockHash snapshotTipHash;
 
-            var forkedId = Guid.NewGuid();
+                do
+                {
+                    snapshotTipIndex++;
 
-            Fork(chainId, forkedId, snapshotTipHash, tip);
+                    if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is BlockHash hash))
+                    {
+                        throw new CommandExitedException(
+                            $"The index {snapshotTipIndex} doesn't exist on ${chainId}.",
+                            -1);
+                    }
 
-            _store.SetCanonicalChainId(forkedId);
-            foreach (var id in _store.ListChainIds().Where(id => !id.Equals(forkedId)))
-            {
-                _store.DeleteChainId(id);
-            }
+                    snapshotTipHash = hash;
+                } while (!_stateStore.ContainsStateRoot(_store.GetBlock<DummyAction>(_hashAlgorithmGetter, snapshotTipHash).StateRootHash));
 
-            var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
-            var snapshotTipStateRootHash = _store.GetStateRootHash(snapshotTipHash);
+                var forkedId = Guid.NewGuid();
 
-            _stateStore.CopyStates(ImmutableHashSet<HashDigest<SHA256>>.Empty
-                .Add((HashDigest<SHA256>)snapshotTipStateRootHash), newStateStore);
+                Fork(chainId, forkedId, snapshotTipHash, tip);
+                _store.Dispose();
+                _stateStore.Dispose();
+                newStateKeyValueStore.Dispose();
 
-            var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
-            var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
-            var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
-            var latestTxEpoch = (int) (txTimeSecond / txEpochUnitSeconds);
+                _store.SetCanonicalChainId(forkedId);
+                foreach (var id in _store.ListChainIds().Where(id => !id.Equals(forkedId)))
+                {
+                    _store.DeleteChainId(id);
+                }
 
-            _store.Dispose();
-            _stateStore.Dispose();
-            newStateKeyValueStore.Dispose();
+                var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
+                var snapshotTipStateRootHash = _store.GetStateRootHash(snapshotTipHash);
 
-            Directory.Delete(statesPath, recursive: true);
-            Directory.Move(newStatesPath, statesPath);
+                Console.WriteLine("CopyStates Start.");
+                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "CopyStates Start");
+                response = wb.UploadString(url, "POST", data);
+                Console.WriteLine(response);
+                var start = DateTimeOffset.Now;
+                _stateStore.CopyStates(ImmutableHashSet<HashDigest<SHA256>>.Empty
+                    .Add((HashDigest<SHA256>)snapshotTipStateRootHash), newStateStore);
+                var end = DateTimeOffset.Now;
+                var stringdata = String.Format("CopyStates Done. Time Taken: {0} min", (end - start).Minutes);
+                Console.WriteLine(stringdata);
+                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                response = wb.UploadString(url, "POST", data);
+                Console.WriteLine(response);
 
-            var partitionBaseFilename = GetPartitionBaseFileName(
-                currentMetadataBlockEpoch,
-                currentMetadataTxEpoch,
-                latestBlockEpoch,
-                latestTxEpoch);
-            var stateBaseFilename = $"state_latest";
+                var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
+                var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
+                var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
+                var latestTxEpoch = (int) (txTimeSecond / txEpochUnitSeconds);
 
-            var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
-            var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
-            var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
-            var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.zip";
-            var fullSnapshotPath = Path.Combine(fullSnapshotDirectory, fullSnapshotFilename);
+                _store.Dispose();
+                _stateStore.Dispose();
+                newStateKeyValueStore.Dispose();
 
-            var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
-            var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
-            var stateSnapshotFilename = $"{stateBaseFilename}.zip";
-            var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
-            string partitionDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
-            string stateDirectory = Path.Combine(Path.GetTempPath(), "state");
-            CleanStore(
-                partitionSnapshotPath,
-                stateSnapshotPath,
-                fullSnapshotPath,
-                storePath,
-                partitionDirectory,
-                stateDirectory);
-            if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
-            {
-                var blockPath = Path.Combine(partitionDirectory, "block");
-                var txPath = Path.Combine(partitionDirectory, "tx");
+                Console.WriteLine("Move States Start.");
+                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Move States Start");
+                response = wb.UploadString(url, "POST", data);
+                Console.WriteLine(response);
+                start = DateTimeOffset.Now;
+                Directory.Delete(statesPath, recursive: true);
+                Directory.Move(newStatesPath, statesPath);
+                end = DateTimeOffset.Now;
+                stringdata = String.Format("Move States Done. Time Taken: {0} min", (end - start).Minutes);
+                Console.WriteLine(stringdata);
+                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                response = wb.UploadString(url, "POST", data);
+                Console.WriteLine(response);
 
-                // get epoch limit for block & tx
-                var blockEpochLimit = GetEpochLimit(
-                    latestBlockEpoch,
+                var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
-                    previousMetadataBlockEpoch);
-                var txEpochLimit = GetEpochLimit(
-                    latestTxEpoch,
                     currentMetadataTxEpoch,
-                    previousMetadataTxEpoch);
-                Task.WaitAll(
-                    Task.Run(() =>
-                    {
-                        CloneDirectory(storePath, partitionDirectory);
-                        CleanPartitionStore(partitionDirectory);
+                    latestBlockEpoch,
+                    latestTxEpoch);
+                var stateBaseFilename = $"state_latest";
 
-                        // clean epoch directories in block & tx
-                        CleanEpoch(blockPath, blockEpochLimit);
-                        CleanEpoch(txPath, blockEpochLimit);
-                    }),
-                    Task.Run(() =>
-                    {
-                        CloneDirectory(storePath, stateDirectory);
-                        CleanStateStore(stateDirectory);
-                    }));
-            }
+                var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
+                var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
+                var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
+                var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.zip";
+                var fullSnapshotPath = Path.Combine(fullSnapshotDirectory, fullSnapshotFilename);
 
-            var tasks = new List<Task>();
-            if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
-            {
-                tasks.Add(Task.Run(() => ZipFile.CreateFromDirectory(storePath, fullSnapshotPath)));
-            }
-
-            if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
-            {
-                tasks.Add(Task.Run(() =>
+                var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
+                var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
+                var stateSnapshotFilename = $"{stateBaseFilename}.zip";
+                var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
+                string partitionDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
+                string stateDirectory = Path.Combine(Path.GetTempPath(), "state");
+                if (Directory.Exists(partitionDirectory))
                 {
-                    ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
                     Directory.Delete(partitionDirectory, true);
-                }));
-                tasks.Add(Task.Run(() =>
+                }
+                if (Directory.Exists(stateDirectory))
                 {
-                    ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
                     Directory.Delete(stateDirectory, true);
-                }));
-                tasks.Add(Task.Run(() =>
+                }
+                Console.WriteLine("Clean Store Start.");
+                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Store Start");
+                response = wb.UploadString(url, "POST", data);
+                Console.WriteLine(response);
+                start = DateTimeOffset.Now;
+                CleanStore(
+                    partitionSnapshotPath,
+                    stateSnapshotPath,
+                    fullSnapshotPath,
+                    storePath);
+                end = DateTimeOffset.Now;
+                stringdata = String.Format("Clean Store Done. Time Taken: {0} min", (end - start).Minutes);
+                Console.WriteLine(stringdata);
+                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                response = wb.UploadString(url, "POST", data);
+                Console.WriteLine(response);
+                if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
+                    Console.WriteLine("Clone Partition Directory Start.");
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone Partition Directory Start");
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    start = DateTimeOffset.Now;
+                    CopyDirectory(storePath, partitionDirectory, true);
+                    end = DateTimeOffset.Now;
+                    stringdata = String.Format("Clone Partition Directory Done. Time Taken: {0} min", (end - start).Minutes);
+                    Console.WriteLine(stringdata);
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    var blockPath = Path.Combine(partitionDirectory, "block");
+                    var txPath = Path.Combine(partitionDirectory, "tx");
+
+                    // get epoch limit for block & tx
+                    var blockEpochLimit = GetEpochLimit(
+                        latestBlockEpoch,
+                        currentMetadataBlockEpoch,
+                        previousMetadataBlockEpoch);
+                    var txEpochLimit = GetEpochLimit(
+                        latestTxEpoch,
+                        currentMetadataTxEpoch,
+                        previousMetadataTxEpoch);
+
+                    Console.WriteLine("Clean Partition Store Start.");
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Partition Store Start");
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    start = DateTimeOffset.Now;
+                    // clean epoch directories in block & tx
+                    CleanEpoch(blockPath, blockEpochLimit);
+                    CleanEpoch(txPath, txEpochLimit);
+
+                    CleanPartitionStore(partitionDirectory);
+                    end = DateTimeOffset.Now;
+                    stringdata = String.Format("Clean Partition Store Done. Time Taken: {0} min", (end - start).Minutes);
+                    Console.WriteLine(stringdata);
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+
+                    Console.WriteLine("Clone State Directory Start.");
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone State Directory Start");
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    start = DateTimeOffset.Now;
+                    CopyDirectory(storePath, stateDirectory, true);
+                    end = DateTimeOffset.Now;
+                    stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).Minutes);
+                    Console.WriteLine(stringdata);
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+
+                    Console.WriteLine("Clean State Store Start.");
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean State Store Start");
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    start = DateTimeOffset.Now;
+                    CleanStateStore(stateDirectory);
+                    end = DateTimeOffset.Now;
+                    stringdata = String.Format("Clean State Store Done. Time Taken: {0} min", (end - start).Minutes);
+                    Console.WriteLine(stringdata);
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                }
+                
+                if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
+                {
+                    Console.WriteLine("Create Full ZipFile Start.");
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create Full ZipFile Start");
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    start = DateTimeOffset.Now;
+                    ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
+                    end = DateTimeOffset.Now;
+                    stringdata = String.Format("Create Full ZipFile Done. Time Taken: {0} min", (end - start).Minutes);
+                    Console.WriteLine(stringdata);
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                }
+
+                if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
+                {
+                    Console.WriteLine("Create Partition ZipFile Start.");
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create Partition ZipFile Start");
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    start = DateTimeOffset.Now;
+                    ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
+                    end = DateTimeOffset.Now;
+                    stringdata = String.Format("Create Partition ZipFile Done. Time Taken: {0} min", (end - start).Minutes);
+                    Console.WriteLine(stringdata);
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    Console.WriteLine("Create State ZipFile Start.");
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create State ZipFile Start.");
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
+                    start = DateTimeOffset.Now;
+                    ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
+                    end = DateTimeOffset.Now;
+                    stringdata = String.Format("Create State Zipfile Done. Time Taken: {0} min", (end - start).Minutes);
+                    Console.WriteLine(stringdata);
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
+                    response = wb.UploadString(url, "POST", data);
+                    Console.WriteLine(response);
                     if (snapshotTipDigest is null)
                     {
                         throw new CommandExitedException("Tip does not exist.", -1);
@@ -264,10 +379,18 @@ namespace NineChronicles.Snapshot
                     }
 
                     File.WriteAllText(metadataPath, stringfyMetadata);
-                }));
-            }
+                    Directory.Delete(partitionDirectory, true);
+                    Directory.Delete(stateDirectory, true);
+                }
 
-            Task.WaitAll(tasks.ToArray());
+                data = String.Format("Create Snapshot-{0} Complete.", snapshotType.ToString());
+                response = wb.UploadString(url, "POST", data);
+                Console.WriteLine(response);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
         }
 
         private void PruneOutdatedColumnFamilies(string path)
@@ -431,9 +554,7 @@ namespace NineChronicles.Snapshot
             string partitionSnapshotPath,
             string stateSnapshotPath,
             string fullSnapshotPath,
-            string storePath,
-            string partitionDirectory,
-            string stateDirectory)
+            string storePath)
         {
             if (File.Exists(partitionSnapshotPath))
             {
@@ -453,9 +574,7 @@ namespace NineChronicles.Snapshot
             var cleanDirectories = new[]
             {
                 Path.Combine(storePath, "blockpercept"),
-                Path.Combine(storePath, "stagedtx"),
-                partitionDirectory,
-                stateDirectory
+                Path.Combine(storePath, "stagedtx")
             };
 
             foreach (var path in cleanDirectories)
@@ -598,6 +717,46 @@ namespace NineChronicles.Snapshot
             }
         }
 
+        private void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
+        {
+            try
+            {
+                // Get information about the source directory
+                var dir = new DirectoryInfo(sourceDir);
+
+                // Check if the source directory exists
+                if (!dir.Exists)
+                    throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+
+                // Cache directories before we start copying
+                DirectoryInfo[] dirs = dir.GetDirectories();
+
+                // Create the destination directory
+                Directory.CreateDirectory(destinationDir);
+
+                // Get the files in the source directory and copy to the destination directory
+                foreach (FileInfo file in dir.GetFiles())
+                {
+                    string targetFilePath = Path.Combine(destinationDir, file.Name);
+                    file.CopyTo(targetFilePath);
+                }
+
+                // If recursive and copying subdirectories, recursively call this method
+                if (recursive)
+                {
+                    foreach (DirectoryInfo subDir in dirs)
+                    {
+                        string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                        CopyDirectory(subDir.FullName, newDestinationDir, true);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+        
         private void CleanEpoch(string path, int epochLimit)
         {
             string[] directories = Directory.GetDirectories(
