@@ -104,7 +104,14 @@ namespace NineChronicles.Snapshot
                     }
                 }
 
-                PruneOutdatedColumnFamilies(Path.Combine(storePath, "chain"));
+                if (RocksDBStore.MigrateChainDBFromColumnFamilies(Path.Combine(storePath, "chain")))
+                {
+                    Console.WriteLine("Successfully migrated IndexDB.");
+                }
+                else
+                {
+                    Console.WriteLine("Migration not required.");
+                }
 
                 _hashAlgorithmGetter = (_ => HashAlgorithmType.Of<SHA256>());
                 _store = new RocksDBStore(
@@ -388,79 +395,6 @@ namespace NineChronicles.Snapshot
             {
                 Console.WriteLine(ex.Message);
             }
-        }
-
-        private void PruneOutdatedColumnFamilies(string path)
-        {
-            var opt = new DbOptions();
-            List<string> cfns = RocksDb.ListColumnFamilies(opt, path).ToList();
-            var cfs = new ColumnFamilies();
-            foreach (string name in cfns)
-            {
-                cfs.Add(name, opt);
-            }
-
-            using RocksDb db = RocksDb.Open(opt, path, cfs);
-            var ccid = new Guid(db.Get(new[] { (byte)'C' }));
-            ColumnFamilyHandle ccf = db.GetColumnFamily(ccid.ToString());
-
-            (ColumnFamilyHandle, long)? PreviousColumnFamily(ColumnFamilyHandle cfh)
-            {
-                byte[] cid = db.Get(new[] { (byte)'P' }, cfh);
-
-                if (cid is null)
-                {
-                    return null;
-                }
-                else
-                {
-                    return (
-                        db.GetColumnFamily(new Guid(cid).ToString()),
-                        RocksDBStoreBitConverter.ToInt64(db.Get(new[] { (byte)'p' }, cfh))
-                    );
-                }
-            }
-
-            var cfInfo = PreviousColumnFamily(ccf);
-            var ip = new[] { (byte)'I' };
-            var batch = new WriteBatch();
-            while (cfInfo is { } cfInfoNotNull)
-            {
-                ColumnFamilyHandle cf = cfInfoNotNull.Item1;
-                long cfi = cfInfoNotNull.Item2;
-                
-                Iterator it = db.NewIterator(cf);
-                for (it.Seek(ip); it.Valid() && it.Key().StartsWith(ip); it.Next())
-                {
-                    long index = RocksDBStoreBitConverter.ToInt64(it.Key().Skip(1).ToArray());
-                    if (index > cfi)
-                    {
-                        continue;
-                    }
-                    batch.Put(it.Key(), it.Value(), ccf);
-
-                    if (batch.Count() > 10000)
-                    {
-                        db.Write(batch);
-                        batch.Clear();
-                    }
-                }
-
-                cfInfo = PreviousColumnFamily(cf);
-            }
-
-            db.Write(batch);
-
-            foreach (string name in cfns)
-            {
-                if (name == ccid.ToString() || name == "default")
-                {
-                    continue;
-                }
-                db.DropColumnFamily(name);
-            }
-
-            db.Remove(new[] { (byte)'P' }, ccf);
         }
 
         private string GetPartitionBaseFileName(
