@@ -6,8 +6,6 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Bencodex.Types;
 using Cocona;
 using Libplanet;
@@ -18,9 +16,7 @@ using Libplanet.Store;
 using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RocksDbSharp;
 using System.Net;
-using System.Collections.Specialized;
 
 namespace NineChronicles.Snapshot
 {
@@ -325,15 +321,6 @@ namespace NineChronicles.Snapshot
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
-
-                    // Console.WriteLine("Clean State Store Start.");
-                    // data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean State Store Start");
-                    // response = wb.UploadString(url, "POST", data);
-                    // Console.WriteLine(response);
-                    // start = DateTimeOffset.Now;
-                    // CleanStateStore(stateDirectory);
-                    // end = DateTimeOffset.Now;
-                    // stringdata = String.Format("Clean State Store Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     response = wb.UploadString(url, "POST", data);
