@@ -6,8 +6,6 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Bencodex.Types;
 using Cocona;
 using Libplanet;
@@ -18,9 +16,7 @@ using Libplanet.Store;
 using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RocksDbSharp;
 using System.Net;
-using System.Collections.Specialized;
 
 namespace NineChronicles.Snapshot
 {
@@ -252,20 +248,23 @@ namespace NineChronicles.Snapshot
                 Console.WriteLine(response);
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
+                    var storeBlockPath = Path.Combine(storePath, "block");
+                    var storeTxPath = Path.Combine(storePath, "tx");
+                    var partitionDirBlockPath = Path.Combine(partitionDirectory, "block");
+                    var partitionDirTxPath = Path.Combine(partitionDirectory, "tx");
                     Console.WriteLine("Clone Partition Directory Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone Partition Directory Start");
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
                     start = DateTimeOffset.Now;
-                    CopyDirectory(storePath, partitionDirectory, true);
+                    CopyDirectory(storeBlockPath, partitionDirBlockPath, true);
+                    CopyDirectory(storeTxPath, partitionDirTxPath, true);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Clone Partition Directory Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
-                    var blockPath = Path.Combine(partitionDirectory, "block");
-                    var txPath = Path.Combine(partitionDirectory, "tx");
 
                     // get epoch limit for block & tx
                     var blockEpochLimit = GetEpochLimit(
@@ -283,8 +282,8 @@ namespace NineChronicles.Snapshot
                     Console.WriteLine(response);
                     start = DateTimeOffset.Now;
                     // clean epoch directories in block & tx
-                    CleanEpoch(blockPath, blockEpochLimit);
-                    CleanEpoch(txPath, txEpochLimit);
+                    CleanEpoch(partitionDirBlockPath, blockEpochLimit);
+                    CleanEpoch(partitionDirTxPath, txEpochLimit);
 
                     CleanPartitionStore(partitionDirectory);
                     end = DateTimeOffset.Now;
@@ -299,22 +298,29 @@ namespace NineChronicles.Snapshot
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
                     start = DateTimeOffset.Now;
-                    CopyDirectory(storePath, stateDirectory, true);
+
+                    var storeBlockIndexPath = Path.Combine(storePath, "block", "blockindex");
+                    var storeTxIndexPath = Path.Combine(storePath, "tx", "txindex");
+                    var storeTxBIndexPath = Path.Combine(storePath, "txbindex");
+                    var storeStatesPath = Path.Combine(storePath, "states");
+                    var storeChainPath = Path.Combine(storePath, "chain");
+                    var stateDirBlockIndexPath = Path.Combine(stateDirectory, "block", "blockindex");
+                    var stateDirTxIndexPath = Path.Combine(stateDirectory, "tx", "txindex");
+                    var stateDirTxBIndexPath = Path.Combine(stateDirectory, "txbindex");
+                    var stateDirStatesPath = Path.Combine(stateDirectory, "states");
+                    var stateDirChainPath = Path.Combine(stateDirectory, "chain");
+                    CopyDirectory(storeBlockIndexPath, stateDirBlockIndexPath, true);
+                    CopyDirectory(storeTxIndexPath, stateDirTxIndexPath, true);
+                    CopyDirectory(storeTxBIndexPath, stateDirTxBIndexPath, true);
+                    CopyDirectory(storeStatesPath, stateDirStatesPath, true);
+                    CopyDirectory(storeChainPath, stateDirChainPath, true);
+
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
-
-                    Console.WriteLine("Clean State Store Start.");
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean State Store Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
-                    start = DateTimeOffset.Now;
-                    CleanStateStore(stateDirectory);
-                    end = DateTimeOffset.Now;
-                    stringdata = String.Format("Clean State Store Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     response = wb.UploadString(url, "POST", data);
@@ -521,13 +527,6 @@ namespace NineChronicles.Snapshot
         {
             var cleanDirectories = new[]
             {
-                Path.Combine(partitionDirectory, "state"),
-                Path.Combine(partitionDirectory, "state_hashes"),
-                Path.Combine(partitionDirectory, "stateref"),
-                Path.Combine(partitionDirectory, "states"),
-                Path.Combine(partitionDirectory, "chain"),
-                Path.Combine(partitionDirectory, "txexec"),
-                Path.Combine(partitionDirectory, "txbindex"),
                 Path.Combine(partitionDirectory, "block", "blockindex"),
                 Path.Combine(partitionDirectory, "tx", "txindex"),
             };
