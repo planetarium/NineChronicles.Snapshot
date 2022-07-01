@@ -88,10 +88,9 @@ namespace NineChronicles.Snapshot
                 var statePath = Path.Combine(storePath, "state");
                 var newStatesPath = Path.Combine(storePath, "new_states");
                 var stateHashesPath = Path.Combine(storePath, "state_hashes");
-                var txexecPath = Path.Combine(storePath, "txexec");
 
                 var staleDirectories =
-                new [] { mainPath, statePath, stateRefPath, stateHashesPath, txexecPath };
+                new [] { mainPath, statePath, stateRefPath, stateHashesPath};
                 foreach (var staleDirectory in staleDirectories)
                 {
                     if (Directory.Exists(staleDirectory))
@@ -298,23 +297,7 @@ namespace NineChronicles.Snapshot
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
                     start = DateTimeOffset.Now;
-
-                    var storeBlockIndexPath = Path.Combine(storePath, "block", "blockindex");
-                    var storeTxIndexPath = Path.Combine(storePath, "tx", "txindex");
-                    var storeTxBIndexPath = Path.Combine(storePath, "txbindex");
-                    var storeStatesPath = Path.Combine(storePath, "states");
-                    var storeChainPath = Path.Combine(storePath, "chain");
-                    var stateDirBlockIndexPath = Path.Combine(stateDirectory, "block", "blockindex");
-                    var stateDirTxIndexPath = Path.Combine(stateDirectory, "tx", "txindex");
-                    var stateDirTxBIndexPath = Path.Combine(stateDirectory, "txbindex");
-                    var stateDirStatesPath = Path.Combine(stateDirectory, "states");
-                    var stateDirChainPath = Path.Combine(stateDirectory, "chain");
-                    CopyDirectory(storeBlockIndexPath, stateDirBlockIndexPath, true);
-                    CopyDirectory(storeTxIndexPath, stateDirTxIndexPath, true);
-                    CopyDirectory(storeTxBIndexPath, stateDirTxBIndexPath, true);
-                    CopyDirectory(storeStatesPath, stateDirStatesPath, true);
-                    CopyDirectory(storeChainPath, stateDirChainPath, true);
-
+                    CopyStateStore(storePath, stateDirectory);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
@@ -540,31 +523,26 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private void CleanStateStore(string stateDirectory)
+        private void CopyStateStore(string storePath,string stateDirectory)
         {
-            var blockPath = Path.Combine(stateDirectory, "block");
-            var txPath = Path.Combine(stateDirectory, "tx");
-            var txExecPath = Path.Combine(stateDirectory, "txexec");
-            string[] blockDirectories = Directory.GetDirectories(
-                blockPath,
-                "epoch*",
-                SearchOption.AllDirectories);
-            string[] txDirectories = Directory.GetDirectories(
-                txPath,
-                "epoch*",
-                SearchOption.AllDirectories);
-
-            foreach (string dir in blockDirectories)
-            {
-                Directory.Delete(dir, true);
-            }
-
-            foreach (string dir in txDirectories)
-            {
-                Directory.Delete(dir, true);
-            }
-
-            Directory.Delete(txExecPath, true);
+            var storeBlockIndexPath = Path.Combine(storePath, "block", "blockindex");
+            var storeTxIndexPath = Path.Combine(storePath, "tx", "txindex");
+            var storeTxExecPath = Path.Combine(storePath, "txexec");
+            var storeTxBIndexPath = Path.Combine(storePath, "txbindex");
+            var storeStatesPath = Path.Combine(storePath, "states");
+            var storeChainPath = Path.Combine(storePath, "chain");
+            var stateDirBlockIndexPath = Path.Combine(stateDirectory, "block", "blockindex");
+            var stateDirTxIndexPath = Path.Combine(stateDirectory, "tx", "txindex");
+            var stateDirTxExecPath = Path.Combine(stateDirectory, "txexec");
+            var stateDirTxBIndexPath = Path.Combine(stateDirectory, "txbindex");
+            var stateDirStatesPath = Path.Combine(stateDirectory, "states");
+            var stateDirChainPath = Path.Combine(stateDirectory, "chain");
+            CopyDirectory(storeBlockIndexPath, stateDirBlockIndexPath, true);
+            CopyDirectory(storeTxIndexPath, stateDirTxIndexPath, true);
+            CopyDirectory(storeTxExecPath, stateDirTxExecPath, true);
+            CopyDirectory(storeTxBIndexPath, stateDirTxBIndexPath, true);
+            CopyDirectory(storeStatesPath, stateDirStatesPath, true);
+            CopyDirectory(storeChainPath, stateDirChainPath, true);
         }
 
         private void Fork(
