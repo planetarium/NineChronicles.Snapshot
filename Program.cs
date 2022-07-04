@@ -221,14 +221,17 @@ namespace NineChronicles.Snapshot
                 var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
                 string partitionDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
                 string stateDirectory = Path.Combine(Path.GetTempPath(), "state");
+
                 if (Directory.Exists(partitionDirectory))
                 {
                     Directory.Delete(partitionDirectory, true);
                 }
+
                 if (Directory.Exists(stateDirectory))
                 {
                     Directory.Delete(stateDirectory, true);
                 }
+
                 Console.WriteLine("Clean Store Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Store Start");
                 response = wb.UploadString(url, "POST", data);
@@ -245,6 +248,7 @@ namespace NineChronicles.Snapshot
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                 response = wb.UploadString(url, "POST", data);
                 Console.WriteLine(response);
+
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
                     var storeBlockPath = Path.Combine(storePath, "block");
@@ -341,7 +345,7 @@ namespace NineChronicles.Snapshot
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
                     Console.WriteLine("Create State ZipFile Start.");
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create State ZipFile Start.");
+                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create State ZipFile Start");
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
                     start = DateTimeOffset.Now;
@@ -352,6 +356,7 @@ namespace NineChronicles.Snapshot
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     response = wb.UploadString(url, "POST", data);
                     Console.WriteLine(response);
+
                     if (snapshotTipDigest is null)
                     {
                         throw new CommandExitedException("Tip does not exist.", -1);
@@ -366,6 +371,7 @@ namespace NineChronicles.Snapshot
                         latestBlockEpoch);
                     var metadataFilename = $"{partitionBaseFilename}.json";
                     var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
+
                     if (File.Exists(metadataPath))
                     {
                         File.Delete(metadataPath);
@@ -527,19 +533,16 @@ namespace NineChronicles.Snapshot
         {
             var storeBlockIndexPath = Path.Combine(storePath, "block", "blockindex");
             var storeTxIndexPath = Path.Combine(storePath, "tx", "txindex");
-            var storeTxExecPath = Path.Combine(storePath, "txexec");
             var storeTxBIndexPath = Path.Combine(storePath, "txbindex");
             var storeStatesPath = Path.Combine(storePath, "states");
             var storeChainPath = Path.Combine(storePath, "chain");
             var stateDirBlockIndexPath = Path.Combine(stateDirectory, "block", "blockindex");
             var stateDirTxIndexPath = Path.Combine(stateDirectory, "tx", "txindex");
-            var stateDirTxExecPath = Path.Combine(stateDirectory, "txexec");
             var stateDirTxBIndexPath = Path.Combine(stateDirectory, "txbindex");
             var stateDirStatesPath = Path.Combine(stateDirectory, "states");
             var stateDirChainPath = Path.Combine(stateDirectory, "chain");
             CopyDirectory(storeBlockIndexPath, stateDirBlockIndexPath, true);
             CopyDirectory(storeTxIndexPath, stateDirTxIndexPath, true);
-            CopyDirectory(storeTxExecPath, stateDirTxExecPath, true);
             CopyDirectory(storeTxBIndexPath, stateDirTxBIndexPath, true);
             CopyDirectory(storeStatesPath, stateDirStatesPath, true);
             CopyDirectory(storeChainPath, stateDirChainPath, true);
