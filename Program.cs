@@ -24,7 +24,6 @@ namespace NineChronicles.Snapshot
     {
         private RocksDBStore _store;
         private TrieStateStore _stateStore;
-        private HashAlgorithmGetter _hashAlgorithmGetter;
 
         public enum SnapshotType { Full, Partition, All }
 
@@ -108,7 +107,6 @@ namespace NineChronicles.Snapshot
                     Console.WriteLine("Migration not required.");
                 }
 
-                _hashAlgorithmGetter = (_ => HashAlgorithmType.Of<SHA256>());
                 _store = new RocksDBStore(
                     storePath,
                     blockEpochUnitSeconds: blockEpochUnitSeconds,
@@ -134,7 +132,7 @@ namespace NineChronicles.Snapshot
                         -1);
                 }
 
-                var tip = _store.GetBlock<DummyAction>(_hashAlgorithmGetter, tipHash);
+                var tip = _store.GetBlock<DummyAction>(tipHash);
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 BlockHash snapshotTipHash;
 
@@ -150,7 +148,7 @@ namespace NineChronicles.Snapshot
                     }
 
                     snapshotTipHash = hash;
-                } while (!_stateStore.ContainsStateRoot(_store.GetBlock<DummyAction>(_hashAlgorithmGetter, snapshotTipHash).StateRootHash));
+                } while (!_stateStore.ContainsStateRoot(_store.GetBlock<DummyAction>(snapshotTipHash).StateRootHash));
 
                 var forkedId = Guid.NewGuid();
 
@@ -449,7 +447,7 @@ namespace NineChronicles.Snapshot
             int previousMetadataBlockEpoch,
             int latestBlockEpoch)
         {
-            BlockHeader snapshotTipHeader = snapshotTipDigest.GetHeader(_hashAlgorithmGetter);
+            BlockHeader snapshotTipHeader = snapshotTipDigest.GetHeader();
             JObject jsonObject = JObject.FromObject(snapshotTipHeader);
             jsonObject.Add("APV", apv);
 
@@ -554,7 +552,7 @@ namespace NineChronicles.Snapshot
             BlockHash branchpointHash,
             Block<DummyAction> tip)
         {
-            var branchPoint = _store.GetBlock<DummyAction>(_hashAlgorithmGetter, branchpointHash);
+            var branchPoint = _store.GetBlock<DummyAction>(branchpointHash);
             _store.ForkBlockIndexes(src, dest, branchpointHash);
             _store.ForkTxNonces(src, dest);
 
@@ -562,7 +560,7 @@ namespace NineChronicles.Snapshot
                 Block<DummyAction> block = tip;
                 block.PreviousHash is BlockHash hash
                 && !block.Hash.Equals(branchpointHash);
-                block = _store.GetBlock<DummyAction>(_hashAlgorithmGetter, hash))
+                block = _store.GetBlock<DummyAction>(hash))
             {
                 IEnumerable<(Address, int)> signers = block
                     .Transactions
@@ -604,7 +602,7 @@ namespace NineChronicles.Snapshot
             {
                 if (block.PreviousHash is BlockHash newHash)
                 {
-                    block = store.GetBlock<T>(_hashAlgorithmGetter, newHash);
+                    block = store.GetBlock<T>(newHash);
                 }
             }
             return block;
