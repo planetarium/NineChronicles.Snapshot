@@ -35,6 +35,7 @@ namespace NineChronicles.Snapshot
         [Command]
         public void Snapshot(
             string apv,
+            string slackbotUrl,
             [Option('o')]
             string outputDirectory = null,
             string storePath = null,
@@ -45,8 +46,7 @@ namespace NineChronicles.Snapshot
             {
                 var wb = new WebClient();
                 var data = String.Format("Create Snapshot-{0} start.", snapshotType.ToString());
-                string url =
-                    "https://planetariumhq.slack.com/services/hooks/slackbot?token=4hBLriaHECDGHlNNbOnwjkfk&channel=%23snapshot-monitoring";
+                string url = slackbotUrl;
                 var response = wb.UploadString(url, "POST", data);
                 Console.WriteLine(response);
                 // If store changed epoch unit seconds, this will be changed too
