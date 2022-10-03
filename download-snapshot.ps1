@@ -1,6 +1,10 @@
-$baseUrl = 'https://download.nine-chronicles.com/partition/'
+$baseUrl = $args[0]
+$file_path = $args[1]
 $latest = "$($baseUrl)latest.json"
 $latestState = "$($baseUrl)state_latest.zip"
+
+echo "Clear existing store path"
+Remove-Item $file_path -Recurse -Force
 
 $epoch = Invoke-WebRequest $latest |
 ConvertFrom-Json |
@@ -42,12 +46,13 @@ $myarray.Reverse()
 foreach($currentEpoch in $myarray) {
 	$filename = "snapshot-$($currentEpoch.BlockEpoch)-$($currentEpoch.TxEpoch).zip"
 	echo "Extract $($filename)."
-	Expand-Archive -Path $filename -DestinationPath 9c-main-partition -Force
+	Expand-Archive -Path $filename -DestinationPath $file_path -Force
 }
 
 $filename = "state_latest.zip"
 echo "Extract State."
-Expand-Archive -Path $filename -DestinationPath 9c-main-partition -Force
+Expand-Archive -Path $filename -DestinationPath $file_path -Force
 
 echo "Extract finish. all snapshot download finish"
 
+Remove-Item "*.zip"
