@@ -35,9 +35,9 @@ namespace NineChronicles.Snapshot
         [Command]
         public void Snapshot(
             string apv,
-            string slackbotUrl,
             [Option('o')]
             string outputDirectory,
+            string slackbotUrl = "null",
             string storePath = null,
             int blockBefore = 10,
             SnapshotType snapshotType = SnapshotType.Partition)
@@ -47,8 +47,8 @@ namespace NineChronicles.Snapshot
                 var wb = new WebClient();
                 var data = String.Format("Create Snapshot-{0} start.", snapshotType.ToString());
                 string url = slackbotUrl;
-                var response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                // var response = wb.UploadString(url, "POST", data);
+                // Console.WriteLine(response);
                 // If store changed epoch unit seconds, this will be changed too
                 const int blockEpochUnitSeconds = 86400;
                 const int txEpochUnitSeconds = 86400;
@@ -165,8 +165,8 @@ namespace NineChronicles.Snapshot
 
                 Console.WriteLine("CopyStates Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "CopyStates Start");
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                // response = wb.UploadString(url, "POST", data);
+                // Console.WriteLine(response);
                 var start = DateTimeOffset.Now;
                 _stateStore.CopyStates(ImmutableHashSet<HashDigest<SHA256>>.Empty
                     .Add((HashDigest<SHA256>)snapshotTipStateRootHash), newStateStore);
@@ -174,8 +174,8 @@ namespace NineChronicles.Snapshot
                 var stringdata = String.Format("CopyStates Done. Time Taken: {0} min", (end - start).Minutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                // response = wb.UploadString(url, "POST", data);
+                // Console.WriteLine(response);
 
                 var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
                 var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
@@ -188,8 +188,8 @@ namespace NineChronicles.Snapshot
 
                 Console.WriteLine("Move States Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Move States Start");
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                // response = wb.UploadString(url, "POST", data);
+                // Console.WriteLine(response);
                 start = DateTimeOffset.Now;
                 Directory.Delete(statesPath, recursive: true);
                 Directory.Move(newStatesPath, statesPath);
@@ -197,8 +197,8 @@ namespace NineChronicles.Snapshot
                 stringdata = String.Format("Move States Done. Time Taken: {0} min", (end - start).Minutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                // response = wb.UploadString(url, "POST", data);
+                // Console.WriteLine(response);
 
                 var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
@@ -232,8 +232,8 @@ namespace NineChronicles.Snapshot
 
                 Console.WriteLine("Clean Store Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Store Start");
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                // response = wb.UploadString(url, "POST", data);
+                // Console.WriteLine(response);
                 start = DateTimeOffset.Now;
                 CleanStore(
                     partitionSnapshotPath,
@@ -244,8 +244,8 @@ namespace NineChronicles.Snapshot
                 stringdata = String.Format("Clean Store Done. Time Taken: {0} min", (end - start).Minutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                // response = wb.UploadString(url, "POST", data);
+                // Console.WriteLine(response);
 
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
@@ -255,8 +255,8 @@ namespace NineChronicles.Snapshot
                     var partitionDirTxPath = Path.Combine(partitionDirectory, "tx");
                     Console.WriteLine("Clone Partition Directory Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone Partition Directory Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                     start = DateTimeOffset.Now;
                     CopyDirectory(storeBlockPath, partitionDirBlockPath, true);
                     CopyDirectory(storeTxPath, partitionDirTxPath, true);
@@ -264,8 +264,8 @@ namespace NineChronicles.Snapshot
                     stringdata = String.Format("Clone Partition Directory Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
 
                     // get epoch limit for block & tx
                     var blockEpochLimit = GetEpochLimit(
@@ -279,8 +279,8 @@ namespace NineChronicles.Snapshot
 
                     Console.WriteLine("Clean Partition Store Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Partition Store Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                     start = DateTimeOffset.Now;
                     // clean epoch directories in block & tx
                     CleanEpoch(partitionDirBlockPath, blockEpochLimit);
@@ -291,69 +291,69 @@ namespace NineChronicles.Snapshot
                     stringdata = String.Format("Clean Partition Store Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
 
                     Console.WriteLine("Clone State Directory Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone State Directory Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                     start = DateTimeOffset.Now;
                     CopyStateStore(storePath, stateDirectory);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                 }
                 
                 if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
                 {
                     Console.WriteLine("Create Full ZipFile Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create Full ZipFile Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Create Full ZipFile Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                 }
 
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
                     Console.WriteLine("Create Partition ZipFile Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create Partition ZipFile Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Create Partition ZipFile Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                     Console.WriteLine("Create State ZipFile Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create State ZipFile Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Create State Zipfile Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    // response = wb.UploadString(url, "POST", data);
+                    // Console.WriteLine(response);
 
                     if (snapshotTipDigest is null)
                     {
@@ -381,8 +381,8 @@ namespace NineChronicles.Snapshot
                 }
 
                 data = String.Format("Create Snapshot-{0} Complete.", snapshotType.ToString());
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                // response = wb.UploadString(url, "POST", data);
+                // Console.WriteLine(response);
             }
             catch (Exception ex)
             {
