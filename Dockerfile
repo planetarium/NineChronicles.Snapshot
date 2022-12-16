@@ -2,12 +2,12 @@ FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build-env
 WORKDIR /app
 ARG COMMIT
 
-COPY ./NineChronicles.Snapshot.csproj ./NineChronicles.Snapshot/
+COPY ./NineChronicles.Snapshot/NineChronicles.Snapshot.csproj ./NineChronicles.Snapshot/
 RUN dotnet restore NineChronicles.Snapshot
 
 # Copy everything else and build
 COPY . ./
-RUN dotnet publish NineChronicles.Snapshot.csproj \
+RUN dotnet publish NineChronicles.Snapshot/NineChronicles.Snapshot.csproj \
     -c Release \
     -r linux-x64 \
     -o out \
