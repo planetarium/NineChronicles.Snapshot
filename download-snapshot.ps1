@@ -1,3 +1,8 @@
+if ($args.Length -lt 2) {
+	Write-Error "'baseUrl' and 'file_path' arguments are required.";
+	exit -1;
+}
+
 $baseUrl = $args[0]
 $file_path = $args[1]
 $latest = "$($baseUrl)latest.json"
