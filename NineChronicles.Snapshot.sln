@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NineChronicles.Snapshot", "NineChronicles.Snapshot\NineChronicles.Snapshot.csproj", "{C37DC105-FF05-47B4-9C2A-256072E8057C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet", "libplanet\Libplanet\Libplanet.csproj", "{91BB5A59-40B3-4028-BA11-A14ECB419938}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet.RocksDBStore", "libplanet\Libplanet.RocksDBStore\Libplanet.RocksDBStore.csproj", "{A87BF80A-6B59-4E13-9330-826394294DFA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C37DC105-FF05-47B4-9C2A-256072E8057C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C37DC105-FF05-47B4-9C2A-256072E8057C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C37DC105-FF05-47B4-9C2A-256072E8057C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C37DC105-FF05-47B4-9C2A-256072E8057C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{91BB5A59-40B3-4028-BA11-A14ECB419938}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{91BB5A59-40B3-4028-BA11-A14ECB419938}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{91BB5A59-40B3-4028-BA11-A14ECB419938}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{91BB5A59-40B3-4028-BA11-A14ECB419938}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A87BF80A-6B59-4E13-9330-826394294DFA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A87BF80A-6B59-4E13-9330-826394294DFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A87BF80A-6B59-4E13-9330-826394294DFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A87BF80A-6B59-4E13-9330-826394294DFA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

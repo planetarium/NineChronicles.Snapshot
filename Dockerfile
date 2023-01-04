@@ -2,12 +2,16 @@ FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build-env
 WORKDIR /app
 ARG COMMIT
 
-COPY ./NineChronicles.Snapshot.csproj ./NineChronicles.Snapshot/
+COPY ./libplanet/Libplanet/Libplanet.csproj ./Libplanet/
+COPY ./libplanet/Libplanet.RocksDBStore/Libplanet.RocksDBStore.csproj ./Libplanet.RocksDBStore/
+COPY ./NineChronicles.Snapshot/NineChronicles.Snapshot.csproj ./NineChronicles.Snapshot/
+RUN dotnet restore Libplanet
+RUN dotnet restore Libplanet.RocksDBStore
 RUN dotnet restore NineChronicles.Snapshot
 
 # Copy everything else and build
 COPY . ./
-RUN dotnet publish NineChronicles.Snapshot.csproj \
+RUN dotnet publish NineChronicles.Snapshot/NineChronicles.Snapshot.csproj \
     -c Release \
     -r linux-x64 \
     -o out \
