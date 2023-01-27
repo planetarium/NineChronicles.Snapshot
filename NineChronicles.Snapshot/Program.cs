@@ -35,7 +35,6 @@ namespace NineChronicles.Snapshot
         [Command]
         public void Snapshot(
             string apv,
-            string slackbotUrl,
             [Option('o')]
             string outputDirectory,
             string storePath = null,
@@ -44,14 +43,10 @@ namespace NineChronicles.Snapshot
         {
             try
             {
-                var wb = new WebClient();
                 var data = String.Format("Create Snapshot-{0} start.", snapshotType.ToString());
-                string url = slackbotUrl;
-                var response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                Console.WriteLine(data);
                 // If store changed epoch unit seconds, this will be changed too
-                const int blockEpochUnitSeconds = 86400;
-                const int txEpochUnitSeconds = 86400;
+                const int epochUnitSeconds = 86400;
                 
                 string defaultStorePath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -107,10 +102,7 @@ namespace NineChronicles.Snapshot
                     Console.WriteLine("Migration not required.");
                 }
 
-                _store = new RocksDBStore(
-                    storePath,
-                    blockEpochUnitSeconds: blockEpochUnitSeconds,
-                    txEpochUnitSeconds: txEpochUnitSeconds);
+                _store = new RocksDBStore(storePath);
                 IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
                 IKeyValueStore newStateKeyValueStore = new RocksDBKeyValueStore(newStatesPath);
                 _stateStore = new TrieStateStore(stateKeyValueStore);
@@ -165,8 +157,7 @@ namespace NineChronicles.Snapshot
 
                 Console.WriteLine("CopyStates Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "CopyStates Start");
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                Console.WriteLine(data);
                 var start = DateTimeOffset.Now;
                 _stateStore.CopyStates(ImmutableHashSet<HashDigest<SHA256>>.Empty
                     .Add((HashDigest<SHA256>)snapshotTipStateRootHash), newStateStore);
@@ -174,13 +165,9 @@ namespace NineChronicles.Snapshot
                 var stringdata = String.Format("CopyStates Done. Time Taken: {0} min", (end - start).Minutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                Console.WriteLine(data);
 
-                var latestBlockEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / blockEpochUnitSeconds);
-                var latestBlockWithTx = GetLatestBlockWithTransaction<DummyAction>(tip, _store);
-                var txTimeSecond = latestBlockWithTx.Transactions.Max(tx => tx.Timestamp.ToUnixTimeSeconds());
-                var latestTxEpoch = (int) (txTimeSecond / txEpochUnitSeconds);
+                var latestEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
 
                 _store.Dispose();
                 _stateStore.Dispose();
@@ -188,8 +175,7 @@ namespace NineChronicles.Snapshot
 
                 Console.WriteLine("Move States Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Move States Start");
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                Console.WriteLine(data);
                 start = DateTimeOffset.Now;
                 Directory.Delete(statesPath, recursive: true);
                 Directory.Move(newStatesPath, statesPath);
@@ -197,15 +183,13 @@ namespace NineChronicles.Snapshot
                 stringdata = String.Format("Move States Done. Time Taken: {0} min", (end - start).Minutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                Console.WriteLine(data);
 
                 var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
                     currentMetadataTxEpoch,
-                    latestBlockEpoch,
-                    latestTxEpoch);
-                var stateBaseFilename = $"state_latest";
+                    latestEpoch);
+                var stateBaseFilename = "state_latest";
 
                 var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
                 var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
@@ -232,8 +216,7 @@ namespace NineChronicles.Snapshot
 
                 Console.WriteLine("Clean Store Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Store Start");
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                Console.WriteLine(data);
                 start = DateTimeOffset.Now;
                 CleanStore(
                     partitionSnapshotPath,
@@ -244,8 +227,7 @@ namespace NineChronicles.Snapshot
                 stringdata = String.Format("Clean Store Done. Time Taken: {0} min", (end - start).Minutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                Console.WriteLine(data);
 
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
@@ -255,8 +237,7 @@ namespace NineChronicles.Snapshot
                     var partitionDirTxPath = Path.Combine(partitionDirectory, "tx");
                     Console.WriteLine("Clone Partition Directory Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone Partition Directory Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                     start = DateTimeOffset.Now;
                     CopyDirectory(storeBlockPath, partitionDirBlockPath, true);
                     CopyDirectory(storeTxPath, partitionDirTxPath, true);
@@ -264,96 +245,80 @@ namespace NineChronicles.Snapshot
                     stringdata = String.Format("Clone Partition Directory Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
 
                     // get epoch limit for block & tx
-                    var blockEpochLimit = GetEpochLimit(
-                        latestBlockEpoch,
+                    var epochLimit = GetEpochLimit(
+                        latestEpoch,
                         currentMetadataBlockEpoch,
                         previousMetadataBlockEpoch);
-                    var txEpochLimit = GetEpochLimit(
-                        latestTxEpoch,
-                        currentMetadataTxEpoch,
-                        previousMetadataTxEpoch);
 
                     Console.WriteLine("Clean Partition Store Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Partition Store Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                     start = DateTimeOffset.Now;
                     // clean epoch directories in block & tx
-                    CleanEpoch(partitionDirBlockPath, blockEpochLimit);
-                    CleanEpoch(partitionDirTxPath, txEpochLimit);
+                    CleanEpoch(partitionDirBlockPath, epochLimit);
+                    CleanEpoch(partitionDirTxPath, epochLimit);
 
                     CleanPartitionStore(partitionDirectory);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Clean Partition Store Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
 
                     Console.WriteLine("Clone State Directory Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone State Directory Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                     start = DateTimeOffset.Now;
                     CopyStateStore(storePath, stateDirectory);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                 }
                 
                 if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
                 {
                     Console.WriteLine("Create Full ZipFile Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create Full ZipFile Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Create Full ZipFile Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                 }
 
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
                     Console.WriteLine("Create Partition ZipFile Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create Partition ZipFile Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Create Partition ZipFile Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                     Console.WriteLine("Create State ZipFile Start.");
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create State ZipFile Start");
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Create State Zipfile Done. Time Taken: {0} min", (end - start).Minutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    response = wb.UploadString(url, "POST", data);
-                    Console.WriteLine(response);
+                    Console.WriteLine(data);
 
                     if (snapshotTipDigest is null)
                     {
@@ -366,7 +331,7 @@ namespace NineChronicles.Snapshot
                         currentMetadataBlockEpoch,
                         currentMetadataTxEpoch,
                         previousMetadataBlockEpoch,
-                        latestBlockEpoch);
+                        latestEpoch);
                     var metadataFilename = $"{partitionBaseFilename}.json";
                     var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
 
@@ -381,8 +346,7 @@ namespace NineChronicles.Snapshot
                 }
 
                 data = String.Format("Create Snapshot-{0} Complete.", snapshotType.ToString());
-                response = wb.UploadString(url, "POST", data);
-                Console.WriteLine(response);
+                Console.WriteLine(data);
             }
             catch (Exception ex)
             {
@@ -393,18 +357,17 @@ namespace NineChronicles.Snapshot
         private string GetPartitionBaseFileName(
             int currentMetadataBlockEpoch,
             int currentMetadataTxEpoch,
-            int latestBlockEpoch,
-            int latestTxEpoch
+            int latestEpoch
         )
         {
             // decrease latest epochs by 1 when creating genesis snapshot
             if (currentMetadataBlockEpoch == 0 && currentMetadataTxEpoch == 0)
             {
-                return $"snapshot-{latestBlockEpoch - 1}-{latestBlockEpoch - 1}";
+                return $"snapshot-{latestEpoch - 1}-{latestEpoch - 1}";
             }
             else
             {
-                return $"snapshot-{latestBlockEpoch}-{latestBlockEpoch}";
+                return $"snapshot-{latestEpoch}-{latestEpoch}";
             }
         }
 
@@ -423,20 +386,17 @@ namespace NineChronicles.Snapshot
                     // to save previous epoch in snapshot
                     return previousMetadataEpoch - 1;
                 }
+
                 // case when metadata points to genesis snapshot
-                else if (previousMetadataEpoch == 0)
+                if (previousMetadataEpoch == 0)
                 {
                     return currentMetadataEpoch - 1;
                 }
-                else
-                {
-                    return previousMetadataEpoch;
-                }
+
+                return previousMetadataEpoch;
             }
-            else
-            {
-                return currentMetadataEpoch;
-            }
+
+            return currentMetadataEpoch;
         }
 
         private string CreateMetadata(
@@ -445,7 +405,7 @@ namespace NineChronicles.Snapshot
             int currentMetadataBlockEpoch,
             int currentMetadataTxEpoch,
             int previousMetadataBlockEpoch,
-            int latestBlockEpoch)
+            int latestEpoch)
         {
             BlockHeader snapshotTipHeader = snapshotTipDigest.GetHeader();
             JObject jsonObject = JObject.FromObject(snapshotTipHeader);
@@ -455,20 +415,20 @@ namespace NineChronicles.Snapshot
                 jsonObject,
                 currentMetadataBlockEpoch,
                 previousMetadataBlockEpoch,
-                latestBlockEpoch,
+                latestEpoch,
                 "PreviousBlockEpoch",
                 "PreviousTxEpoch");
 
             // decrease latest epochs by 1 for genesis snapshot
             if (currentMetadataBlockEpoch == 0 && currentMetadataTxEpoch == 0)
             {
-                jsonObject.Add("BlockEpoch", latestBlockEpoch - 1);
-                jsonObject.Add("TxEpoch", latestBlockEpoch - 1);
+                jsonObject.Add("BlockEpoch", latestEpoch - 1);
+                jsonObject.Add("TxEpoch", latestEpoch - 1);
             }
             else
             {
-                jsonObject.Add("BlockEpoch", latestBlockEpoch);
-                jsonObject.Add("TxEpoch", latestBlockEpoch);
+                jsonObject.Add("BlockEpoch", latestEpoch);
+                jsonObject.Add("TxEpoch", latestEpoch);
             }
 
             return JsonConvert.SerializeObject(jsonObject);
@@ -608,24 +568,6 @@ namespace NineChronicles.Snapshot
             return block;
         }
 
-        private void CloneDirectory(string source, string dest)
-        {
-            foreach (var directory in Directory.GetDirectories(source))
-            {
-                string dirName = Path.GetFileName(directory);
-                if (!Directory.Exists(Path.Combine(dest, dirName)))
-                {
-                    Directory.CreateDirectory(Path.Combine(dest, dirName));
-                }
-                CloneDirectory(directory, Path.Combine(dest, dirName));
-            }
-
-            foreach (var file in Directory.GetFiles(source))
-            {
-                File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
-            }
-        }
-
         private void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
         {
             try
@@ -690,60 +632,6 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private JObject AddPreviousTxEpoch(JObject jsonObject,
-            int currentMetadataBlockEpoch,
-            int currentMetadataTxEpoch,
-            int previousMetadataTxEpoch,
-            int latestBlockEpoch,
-            int latestTxEpoch,
-            string txEpochName)
-        {
-                if (currentMetadataTxEpoch == latestTxEpoch)
-                {
-                    if (currentMetadataBlockEpoch != latestBlockEpoch)
-                    {
-                        jsonObject.Add(txEpochName, currentMetadataTxEpoch);
-                    }
-                    else
-                    {
-                        jsonObject.Add(txEpochName, previousMetadataTxEpoch);
-                    }
-                }
-                else
-                {
-                    jsonObject.Add(txEpochName, currentMetadataTxEpoch);
-                }
-
-                return jsonObject;
-        }
-
-        private JObject AddPreviousBlockEpoch(JObject jsonObject,
-            int currentMetadataBlockEpoch,
-            int currentMetadataTxEpoch,
-            int previousMetadataBlockEpoch,
-            int latestBlockEpoch,
-            int latestTxEpoch,
-            string blockEpochName)
-        {
-                if (currentMetadataBlockEpoch == latestBlockEpoch)
-                {
-                    if (currentMetadataTxEpoch != latestTxEpoch)
-                    {
-                        jsonObject.Add(blockEpochName, currentMetadataBlockEpoch);
-                    }
-                    else
-                    {
-                        jsonObject.Add(blockEpochName, previousMetadataBlockEpoch);
-                    }
-                }
-                else
-                {
-                    jsonObject.Add(blockEpochName, currentMetadataBlockEpoch);
-                }
-
-                return jsonObject;
-        }
-
         private JObject AddPreviousEpochs(
             JObject jsonObject,
             int currentMetadataEpoch,
@@ -771,71 +659,6 @@ namespace NineChronicles.Snapshot
             public IValue PlainValue { get; private set; }
             public void LoadPlainValue(IValue plainValue) { PlainValue = plainValue; }
             public IAccountStateDelta Execute(IActionContext context) => context.PreviousStates;
-            public void Render(IActionContext context, IAccountStateDelta nextStates) { }
-            public void RenderError(IActionContext context, Exception exception) { }
-            public void Unrender(IActionContext context, IAccountStateDelta nextStates) { }
-            public void UnrenderError(IActionContext context, Exception exception) { }
-        }
-
-        internal static class RocksDBStoreBitConverter
-        {
-            /// <summary>
-            /// Get <c>long</c> representation of the <paramref name="value"/>.
-            /// </summary>
-            /// <param name="value">The Big-endian byte-array value to convert to <c>long</c>.</param>
-            /// <returns>The <c>long</c> representation of the <paramref name="value"/>.</returns>
-            public static long ToInt64(byte[] value)
-            {
-                byte[] bytes = new byte[sizeof(long)];
-                value.CopyTo(bytes, 0);
-
-                // Use Big-endian to order index lexicographically.
-                if (BitConverter.IsLittleEndian)
-                {
-                    Array.Reverse(bytes);
-                }
-
-                return BitConverter.ToInt64(bytes, 0);
-            }
-
-            /// <summary>
-            /// Get <c>string</c> representation of the <paramref name="value"/>.
-            /// </summary>
-            /// <param name="value">The byte-array value to convert to <c>string</c>.</param>
-            /// <returns>The <c>string</c> representation of the <paramref name="value"/>.</returns>
-            public static string GetString(byte[] value)
-            {
-                return Encoding.UTF8.GetString(value);
-            }
-
-            /// <summary>
-            /// Get Big-endian byte-array representation of the <paramref name="value"/>.
-            /// </summary>
-            /// <param name="value">The <c>long</c> value to convert to byte-array.</param>
-            /// <returns>The Big-endian byte-array representation of the <paramref name="value"/>.
-            /// </returns>
-            public static byte[] GetBytes(long value)
-            {
-                byte[] bytes = BitConverter.GetBytes(value);
-
-                // Use Big-endian to order index lexicographically.
-                if (BitConverter.IsLittleEndian)
-                {
-                    Array.Reverse(bytes);
-                }
-
-                return bytes;
-            }
-
-            /// <summary>
-            /// Get encoded byte-array representation of the <paramref name="value"/>.
-            /// </summary>
-            /// <param name="value">The <c>string</c> to convert to byte-array.</param>
-            /// <returns>The encoded representation of the <paramref name="value"/>.</returns>
-            public static byte[] GetBytes(string value)
-            {
-                return Encoding.UTF8.GetBytes(value);
-            }
         }
     }
 }
