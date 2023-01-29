@@ -59,16 +59,17 @@ namespace NineChronicles.Snapshot
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "state"));
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "metadata"));
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "full"));
+                Directory.CreateDirectory(Path.Combine(outputDirectory, "temp"));
 
                 outputDirectory = string.IsNullOrEmpty(outputDirectory)
                     ? Environment.CurrentDirectory
                     : outputDirectory;
 
                 var metadataDirectory = Path.Combine(outputDirectory, "metadata");
+                var tempDirectory = Path.Combine(outputDirectory, "temp");
                 int currentMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "BlockEpoch");
                 int currentMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "TxEpoch");
                 int previousMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousBlockEpoch");
-                int previousMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousTxEpoch");
 
                 storePath = string.IsNullOrEmpty(storePath) ? defaultStorePath : storePath;
                 if (!Directory.Exists(storePath))
@@ -194,15 +195,15 @@ namespace NineChronicles.Snapshot
                 var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
                 var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
                 var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
-                var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}.zip";
+                var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}-{snapshotTipIndex}.zip";
                 var fullSnapshotPath = Path.Combine(fullSnapshotDirectory, fullSnapshotFilename);
 
                 var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
                 var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
                 var stateSnapshotFilename = $"{stateBaseFilename}.zip";
                 var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
-                string partitionDirectory = Path.Combine(Path.GetTempPath(), "snapshot");
-                string stateDirectory = Path.Combine(Path.GetTempPath(), "state");
+                string partitionDirectory = Path.Combine(tempDirectory, "snapshot");
+                string stateDirectory = Path.Combine(tempDirectory, "state");
 
                 if (Directory.Exists(partitionDirectory))
                 {
