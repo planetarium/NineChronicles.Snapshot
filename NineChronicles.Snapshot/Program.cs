@@ -495,16 +495,19 @@ namespace NineChronicles.Snapshot
             var storeTxBIndexPath = Path.Combine(storePath, "txbindex");
             var storeStatesPath = Path.Combine(storePath, "states");
             var storeChainPath = Path.Combine(storePath, "chain");
+            var storeBlockCommitPath = Path.Combine(storePath, "blockcommit");
             var stateDirBlockIndexPath = Path.Combine(stateDirectory, "block", "blockindex");
             var stateDirTxIndexPath = Path.Combine(stateDirectory, "tx", "txindex");
             var stateDirTxBIndexPath = Path.Combine(stateDirectory, "txbindex");
             var stateDirStatesPath = Path.Combine(stateDirectory, "states");
             var stateDirChainPath = Path.Combine(stateDirectory, "chain");
+            var stateDirBlockCommitPath = Path.Combine(stateDirectory, "blockcommit");
             CopyDirectory(storeBlockIndexPath, stateDirBlockIndexPath, true);
             CopyDirectory(storeTxIndexPath, stateDirTxIndexPath, true);
             CopyDirectory(storeTxBIndexPath, stateDirTxBIndexPath, true);
             CopyDirectory(storeStatesPath, stateDirStatesPath, true);
             CopyDirectory(storeChainPath, stateDirChainPath, true);
+            CopyDirectory(storeBlockCommitPath, stateDirBlockCommitPath, true);
         }
 
         private void Fork(
