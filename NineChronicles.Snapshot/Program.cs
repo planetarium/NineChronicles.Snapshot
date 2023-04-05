@@ -154,14 +154,27 @@ namespace NineChronicles.Snapshot
                 }
 
                 var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
-                var snapshotTipStateRootHash = _store.GetStateRootHash(snapshotTipHash);
+                ImmutableHashSet<HashDigest<SHA256>> stateHashes = ImmutableHashSet<HashDigest<SHA256>>.Empty;
+
+                // Get 5 block digest before snapshot tip using snapshot previous block hash.
+                BlockHash? previousBlockHash = snapshotTipDigest?.Hash;
+                int count = 0;
+                const int maxStateDepth = 5;
+
+                while (previousBlockHash is { } pbh &&
+                       _store.GetBlockDigest(pbh) is { } previousBlockDigest &&
+                       count < maxStateDepth)
+                {
+                    stateHashes = stateHashes.Add(previousBlockDigest.StateRootHash);
+                    previousBlockHash = previousBlockDigest.PreviousHash;
+                    count++;
+                }
 
                 Console.WriteLine("CopyStates Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "CopyStates Start");
                 Console.WriteLine(data);
                 var start = DateTimeOffset.Now;
-                _stateStore.CopyStates(ImmutableHashSet<HashDigest<SHA256>>.Empty
-                    .Add((HashDigest<SHA256>)snapshotTipStateRootHash), newStateStore);
+                _stateStore.CopyStates(stateHashes, newStateStore);
                 var end = DateTimeOffset.Now;
                 var stringdata = String.Format("CopyStates Done. Time Taken: {0} min", (end - start).Minutes);
                 Console.WriteLine(stringdata);
