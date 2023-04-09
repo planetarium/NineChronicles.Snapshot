@@ -156,10 +156,10 @@ namespace NineChronicles.Snapshot
                 var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
                 ImmutableHashSet<HashDigest<SHA256>> stateHashes = ImmutableHashSet<HashDigest<SHA256>>.Empty;
 
-                // Get 5 block digest before snapshot tip using snapshot previous block hash.
+                // Get 2 block digest before snapshot tip using snapshot previous block hash.
                 BlockHash? previousBlockHash = snapshotTipDigest?.Hash;
                 int count = 0;
-                const int maxStateDepth = 5;
+                const int maxStateDepth = 2;
 
                 while (previousBlockHash is { } pbh &&
                        _store.GetBlockDigest(pbh) is { } previousBlockDigest &&
