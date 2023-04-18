@@ -176,12 +176,13 @@ namespace NineChronicles.Snapshot
                 var start = DateTimeOffset.Now;
                 _stateStore.CopyStates(stateHashes, newStateStore);
                 var end = DateTimeOffset.Now;
-                var stringdata = String.Format("CopyStates Done. Time Taken: {0} min", (end - start).Minutes);
+                var stringdata = String.Format("CopyStates Done. Time Taken: {0} min", (end - start).TotalMinutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                 Console.WriteLine(data);
 
                 var latestEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
+                Console.WriteLine("Tip Timestamp: {0} Latest Epoch: {1}", tip.Timestamp.UtcDateTime, latestEpoch);
 
                 _store.Dispose();
                 _stateStore.Dispose();
@@ -194,7 +195,7 @@ namespace NineChronicles.Snapshot
                 Directory.Delete(statesPath, recursive: true);
                 Directory.Move(newStatesPath, statesPath);
                 end = DateTimeOffset.Now;
-                stringdata = String.Format("Move States Done. Time Taken: {0} min", (end - start).Minutes);
+                stringdata = String.Format("Move States Done. Time Taken: {0} min", (end - start).TotalMinutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                 Console.WriteLine(data);
@@ -238,7 +239,7 @@ namespace NineChronicles.Snapshot
                     fullSnapshotPath,
                     storePath);
                 end = DateTimeOffset.Now;
-                stringdata = String.Format("Clean Store Done. Time Taken: {0} min", (end - start).Minutes);
+                stringdata = String.Format("Clean Store Done. Time Taken: {0} min", (end - start).TotalMinutes);
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                 Console.WriteLine(data);
@@ -256,7 +257,7 @@ namespace NineChronicles.Snapshot
                     CopyDirectory(storeBlockPath, partitionDirBlockPath, true);
                     CopyDirectory(storeTxPath, partitionDirTxPath, true);
                     end = DateTimeOffset.Now;
-                    stringdata = String.Format("Clone Partition Directory Done. Time Taken: {0} min", (end - start).Minutes);
+                    stringdata = String.Format("Clone Partition Directory Done. Time Taken: {0} min", (end - start).TotalMinutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     Console.WriteLine(data);
@@ -277,7 +278,7 @@ namespace NineChronicles.Snapshot
 
                     CleanPartitionStore(partitionDirectory);
                     end = DateTimeOffset.Now;
-                    stringdata = String.Format("Clean Partition Store Done. Time Taken: {0} min", (end - start).Minutes);
+                    stringdata = String.Format("Clean Partition Store Done. Time Taken: {0} min", (end - start).TotalMinutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     Console.WriteLine(data);
@@ -288,7 +289,7 @@ namespace NineChronicles.Snapshot
                     start = DateTimeOffset.Now;
                     CopyStateStore(storePath, stateDirectory);
                     end = DateTimeOffset.Now;
-                    stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).Minutes);
+                    stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).TotalMinutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     Console.WriteLine(data);
@@ -305,7 +306,7 @@ namespace NineChronicles.Snapshot
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
                     end = DateTimeOffset.Now;
-                    stringdata = String.Format("Create Full ZipFile Done. Time Taken: {0} min", (end - start).Minutes);
+                    stringdata = String.Format("Create Full ZipFile Done. Time Taken: {0} min", (end - start).TotalMinutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     Console.WriteLine(data);
@@ -319,7 +320,7 @@ namespace NineChronicles.Snapshot
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
                     end = DateTimeOffset.Now;
-                    stringdata = String.Format("Create Partition ZipFile Done. Time Taken: {0} min", (end - start).Minutes);
+                    stringdata = String.Format("Create Partition ZipFile Done. Time Taken: {0} min", (end - start).TotalMinutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     Console.WriteLine(data);
@@ -329,7 +330,7 @@ namespace NineChronicles.Snapshot
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
                     end = DateTimeOffset.Now;
-                    stringdata = String.Format("Create State Zipfile Done. Time Taken: {0} min", (end - start).Minutes);
+                    stringdata = String.Format("Create State Zipfile Done. Time Taken: {0} min", (end - start).TotalMinutes);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     Console.WriteLine(data);
