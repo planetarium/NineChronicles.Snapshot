@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+env:
+  DOCKER_REPO: planetariumhq/ninechronicles-snapshot
+
 jobs:
   build_and_push:
     if: github.ref_type == 'branch'
