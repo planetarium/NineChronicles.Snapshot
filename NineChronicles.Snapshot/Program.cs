@@ -17,6 +17,13 @@ using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Net;
+using System.Reflection;
+using Libplanet.Blockchain;
+using Libplanet.Blockchain.Policies;
+using Libplanet.Blockchain.Renderers;
+using Libplanet.Blockchain.Renderers.Debug;
+using Serilog;
+using Serilog.Events;
 
 namespace NineChronicles.Snapshot
 {
@@ -154,6 +161,7 @@ namespace NineChronicles.Snapshot
                 }
 
                 Console.WriteLine("This is the block commit of original chain tip #{0}: {1}", tip.Index, tip.LastCommit);
+                _store.PutBlockCommit(tip.LastCommit);
                 var snapshotTipLastCommit = _store.GetBlockCommit(snapshotTipHash);
                 Console.WriteLine("This is the block commit of snapshot tip #{0}: {1}", snapshotTipIndex, snapshotTipLastCommit);
                 var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
@@ -185,7 +193,14 @@ namespace NineChronicles.Snapshot
                 Console.WriteLine(data);
 
                 var latestEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
-                Console.WriteLine("Tip Index: {0} Tip Timestamp: {1} Latest Epoch: {2}", tip.Index, tip.Timestamp.UtcDateTime, latestEpoch);
+
+                IStagePolicy<PolymorphicAction<DummyAction>> stagePolicy = new VolatileStagePolicy<PolymorphicAction<DummyAction>>();
+                IBlockPolicy<PolymorphicAction<DummyAction>> blockPolicy =
+                    new BlockPolicy<PolymorphicAction<DummyAction>>();
+                var baseChain = new BlockChain<PolymorphicAction<DummyAction>>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<PolymorphicAction<DummyAction>>(genesisHash));
+                var newTip = baseChain.Tip;
+                Console.WriteLine("Original Tip Index: {0} Tip Timestamp: {1} Tip Commit: {2} Latest Epoch: {3}", tip.Index, tip.Timestamp.UtcDateTime, tip.LastCommit, latestEpoch);
+                Console.WriteLine("New Tip Index: {0} Tip Timestamp: {1} Tip Commit: {2}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit);
 
                 _store.Dispose();
                 _stateStore.Dispose();
@@ -675,11 +690,29 @@ namespace NineChronicles.Snapshot
             return jsonObject;
         }
 
-        private class DummyAction : IAction
+        internal class DummyAction : IAction
         {
             public IValue PlainValue { get; private set; }
             public void LoadPlainValue(IValue plainValue) { PlainValue = plainValue; }
             public IAccountStateDelta Execute(IActionContext context) => context.PreviousStates;
+        }
+
+        public IActionTypeLoader BlockPolicySource(
+            ILogger logger,
+            LogEventLevel logEventLevel = LogEventLevel.Verbose,
+            IActionTypeLoader actionTypeLoader = null)
+        {
+            return actionTypeLoader = actionTypeLoader ?? new StaticActionTypeLoader(
+                Assembly.GetEntryAssembly() is { } entryAssembly
+                    ? new[] { typeof(RenderRecord<>.ActionBase).Assembly, entryAssembly }
+                    : new[] { typeof(RenderRecord<>.ActionBase).Assembly },
+                typeof(RenderRecord<>.ActionBase)
+            );
+        }
+
+        public IBlockPolicy<PolymorphicAction<DummyAction>> GetPolicy()
+        {
+            return new BlockPolicy<PolymorphicAction<DummyAction>>();
         }
     }
 }
