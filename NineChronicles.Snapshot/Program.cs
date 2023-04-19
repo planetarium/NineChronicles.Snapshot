@@ -131,6 +131,8 @@ namespace NineChronicles.Snapshot
                 }
 
                 var tip = _store.GetBlock<DummyAction>(tipHash);
+                var tipBlockCommit = _store.GetBlockCommit(tipHash);
+                Console.WriteLine("Pre-Fork: This is the block commit of original chain tip #{0} Tip.LastCommit: {1} TipGetBlockCommit: {2}", tip.Index, tip.LastCommit, tipBlockCommit);
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 BlockHash snapshotTipHash;
 
@@ -158,10 +160,19 @@ namespace NineChronicles.Snapshot
                     _store.DeleteChainId(id);
                 }
 
-                Console.WriteLine("This is the block commit of original chain tip #{0}: {1}", tip.Index, tip.LastCommit);
+                tipBlockCommit = _store.GetBlockCommit(tipHash);
+                Console.WriteLine("Post-Fork: This is the block commit of original chain tip #{0} Tip.LastCommit: {1} TipGetBlockCommit: {2}", tip.Index, tip.LastCommit, tipBlockCommit);
+                var snapshotTip = _store.GetBlock<DummyAction>(snapshotTipHash);
+                var snapshotTipCommit = _store.GetBlockCommit(snapshotTipHash); 
+                Console.WriteLine("Post-Fork & Before PutBlockCommit: This is the block commit of snapshot tip #{0} snapshotTip.LastCommit: {1} snapshotTipGetBlockCommit: {2}", snapshotTip.Index, snapshotTip.LastCommit, snapshotTipCommit);
                 _store.PutBlockCommit(tip.LastCommit);
-                var snapshotTipLastCommit = _store.GetBlockCommit(snapshotTipHash);
-                Console.WriteLine("This is the block commit of snapshot tip #{0}: {1}", snapshotTipIndex, snapshotTipLastCommit);
+                var snapshotTipMinusOneHash = _store.IndexBlockHash(forkedId, tip.Index - 1);
+                var snapshotTipMinusOne = _store.GetBlock<DummyAction>((BlockHash)snapshotTipMinusOneHash!);
+                var snapshotTipMinusOneCommit = _store.GetBlockCommit((BlockHash)snapshotTipMinusOneHash);
+                Console.WriteLine("Post-Fork & After PutBlockCommit: This is the block commit of snapshot tip #{0} snapshotTip.LastCommit: {1} snapshotTipGetBlockCommit: {2}", snapshotTip.Index, snapshotTip.LastCommit, snapshotTipCommit);
+                Console.WriteLine(
+                    "Post-Fork & After PutBlockCommit: This is the block commit of snapshot tip Minus One #{0} snapshotTipMinusOne.LastCommit: {1} snapshotTipMinusOneGetBlockCommit: {2}",
+                    snapshotTipMinusOne.Index, snapshotTipMinusOne.LastCommit, snapshotTipMinusOneCommit);
                 var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
                 ImmutableHashSet<HashDigest<SHA256>> stateHashes = ImmutableHashSet<HashDigest<SHA256>>.Empty;
 
@@ -197,8 +208,8 @@ namespace NineChronicles.Snapshot
                     new BlockPolicy<PolymorphicAction<DummyAction>>();
                 var baseChain = new BlockChain<PolymorphicAction<DummyAction>>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<PolymorphicAction<DummyAction>>(genesisHash));
                 var newTip = baseChain.Tip;
-                Console.WriteLine("Original Tip Index: {0} Tip Timestamp: {1} Tip Commit: {2} Latest Epoch: {3}", tip.Index, tip.Timestamp.UtcDateTime, tip.LastCommit, latestEpoch);
-                Console.WriteLine("New Tip Index: {0} Tip Timestamp: {1} Tip Commit: {2}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit);
+                Console.WriteLine("Original Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Latest Epoch: {3} Tip Block Commit: {4}", tip.Index, tip.Timestamp.UtcDateTime, tip.LastCommit, latestEpoch, baseChain.GetBlockCommit(tip.Hash));
+                Console.WriteLine("New Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Tip Block Commit: {3}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit, baseChain.GetBlockCommit(newTip.Hash));
 
                 _store.Dispose();
                 _stateStore.Dispose();
