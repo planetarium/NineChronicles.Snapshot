@@ -20,8 +20,6 @@ using System.Net;
 using System.Reflection;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
-using Libplanet.Blockchain.Renderers;
-using Libplanet.Blockchain.Renderers.Debug;
 using Serilog;
 using Serilog.Events;
 
@@ -695,24 +693,6 @@ namespace NineChronicles.Snapshot
             public IValue PlainValue { get; private set; }
             public void LoadPlainValue(IValue plainValue) { PlainValue = plainValue; }
             public IAccountStateDelta Execute(IActionContext context) => context.PreviousStates;
-        }
-
-        public IActionTypeLoader BlockPolicySource(
-            ILogger logger,
-            LogEventLevel logEventLevel = LogEventLevel.Verbose,
-            IActionTypeLoader actionTypeLoader = null)
-        {
-            return actionTypeLoader = actionTypeLoader ?? new StaticActionTypeLoader(
-                Assembly.GetEntryAssembly() is { } entryAssembly
-                    ? new[] { typeof(RenderRecord<>.ActionBase).Assembly, entryAssembly }
-                    : new[] { typeof(RenderRecord<>.ActionBase).Assembly },
-                typeof(RenderRecord<>.ActionBase)
-            );
-        }
-
-        public IBlockPolicy<PolymorphicAction<DummyAction>> GetPolicy()
-        {
-            return new BlockPolicy<PolymorphicAction<DummyAction>>();
         }
     }
 }
