@@ -163,10 +163,11 @@ namespace NineChronicles.Snapshot
                 tipBlockCommit = _store.GetBlockCommit(tipHash);
                 Console.WriteLine("Post-Fork: This is the block commit of original chain tip #{0} Tip.LastCommit: {1} TipGetBlockCommit: {2}", tip.Index, tip.LastCommit, tipBlockCommit);
                 var snapshotTip = _store.GetBlock<DummyAction>(snapshotTipHash);
-                var snapshotTipCommit = _store.GetBlockCommit(snapshotTipHash); 
+                var snapshotTipCommit = _store.GetBlockCommit(snapshotTipHash);
                 Console.WriteLine("Post-Fork & Before PutBlockCommit: This is the block commit of snapshot tip #{0} snapshotTip.LastCommit: {1} snapshotTipGetBlockCommit: {2}", snapshotTip.Index, snapshotTip.LastCommit, snapshotTipCommit);
                 _store.PutBlockCommit(tip.LastCommit);
-                var snapshotTipMinusOneHash = _store.IndexBlockHash(forkedId, tip.Index - 1);
+                snapshotTipCommit = _store.GetBlockCommit(snapshotTipHash);
+                var snapshotTipMinusOneHash = _store.IndexBlockHash(forkedId, snapshotTip.Index - 1);
                 var snapshotTipMinusOne = _store.GetBlock<DummyAction>((BlockHash)snapshotTipMinusOneHash!);
                 var snapshotTipMinusOneCommit = _store.GetBlockCommit((BlockHash)snapshotTipMinusOneHash);
                 Console.WriteLine("Post-Fork & After PutBlockCommit: This is the block commit of snapshot tip #{0} snapshotTip.LastCommit: {1} snapshotTipGetBlockCommit: {2}", snapshotTip.Index, snapshotTip.LastCommit, snapshotTipCommit);
