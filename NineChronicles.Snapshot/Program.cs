@@ -153,6 +153,9 @@ namespace NineChronicles.Snapshot
                     _store.DeleteChainId(id);
                 }
 
+                Console.WriteLine("This is the block commit of original chain tip #{0}: {1}", tip.Index, tip.LastCommit);
+                var snapshotTipLastCommit = _store.GetBlockCommit(snapshotTipHash);
+                Console.WriteLine("This is the block commit of snapshot tip #{0}: {1}", snapshotTipIndex, snapshotTipLastCommit);
                 var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
                 ImmutableHashSet<HashDigest<SHA256>> stateHashes = ImmutableHashSet<HashDigest<SHA256>>.Empty;
 
