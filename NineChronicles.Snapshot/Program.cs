@@ -182,7 +182,7 @@ namespace NineChronicles.Snapshot
                 Console.WriteLine(data);
 
                 var latestEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
-                Console.WriteLine("Tip Timestamp: {0} Latest Epoch: {1}", tip.Timestamp.UtcDateTime, latestEpoch);
+                Console.WriteLine("Tip Index: {0} Tip Timestamp: {1} Latest Epoch: {2}", tip.Index, tip.Timestamp.UtcDateTime, latestEpoch);
 
                 _store.Dispose();
                 _stateStore.Dispose();
