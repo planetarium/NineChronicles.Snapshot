@@ -204,10 +204,10 @@ namespace NineChronicles.Snapshot
 
                 var latestEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
 
-                IStagePolicy<PolymorphicAction<DummyAction>> stagePolicy = new VolatileStagePolicy<PolymorphicAction<DummyAction>>();
-                IBlockPolicy<PolymorphicAction<DummyAction>> blockPolicy =
-                    new BlockPolicy<PolymorphicAction<DummyAction>>();
-                var baseChain = new BlockChain<PolymorphicAction<DummyAction>>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<PolymorphicAction<DummyAction>>(genesisHash));
+                IStagePolicy<DummyAction> stagePolicy = new VolatileStagePolicy<DummyAction>();
+                IBlockPolicy<DummyAction> blockPolicy =
+                    new BlockPolicy<DummyAction>();
+                var baseChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
                 var newTip = baseChain.Tip;
                 Console.WriteLine("Original Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Latest Epoch: {3} Tip Block Commit: {4}", tip.Index, tip.Timestamp.UtcDateTime, tip.LastCommit, latestEpoch, baseChain.GetBlockCommit(tip.Hash));
                 Console.WriteLine("New Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Tip Block Commit: {3}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit, baseChain.GetBlockCommit(newTip.Hash));
