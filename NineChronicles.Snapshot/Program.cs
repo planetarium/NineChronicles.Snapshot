@@ -137,7 +137,12 @@ namespace NineChronicles.Snapshot
 
                 var tip = _store.GetBlock<DummyAction>(tipHash);
                 var tipBlockCommit = _store.GetBlockCommit(tipHash);
-                Console.WriteLine("Pre-Fork: This is the block commit of original chain tip #{0} Tip.LastCommit: {1} TipGetBlockCommit: {2}", tip.Index, tip.LastCommit, tipBlockCommit);
+                IStagePolicy<DummyAction> stagePolicy = new VolatileStagePolicy<DummyAction>();
+                IBlockPolicy<DummyAction> blockPolicy =
+                    new BlockPolicy<DummyAction>();
+                var originalChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
+                Console.WriteLine("*** FROM CHAIN: This is the block commit of original chain tip #{0} Tip.LastCommit: {1} TipGetBlockCommit: {2}", tip.Index, tip.LastCommit, originalChain.GetBlockCommit(tipHash));
+                Console.WriteLine("*** FROM STORE: This is the block commit of original chain tip #{0} Tip.LastCommit: {1} TipGetBlockCommit: {2}", tip.Index, tip.LastCommit, tipBlockCommit);
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 BlockHash snapshotTipHash;
 
@@ -157,6 +162,13 @@ namespace NineChronicles.Snapshot
 
                 var forkedId = Guid.NewGuid();
 
+                tipBlockCommit = _store.GetBlockCommit(tipHash);
+                Console.WriteLine("*** Pre-Fork: This is the block commit of original chain tip #{0} Tip.LastCommit: {1} TipGetBlockCommit: {2}", tip.Index, tip.LastCommit, tipBlockCommit);
+                var snapshotTip = _store.GetBlock<DummyAction>(snapshotTipHash);
+                var snapshotTipCommit = _store.GetBlockCommit(snapshotTipHash);
+                Console.WriteLine("*** Pre-Fork & Before PutBlockCommit: This is the block commit of snapshot tip #{0} snapshotTip.LastCommit: {1} snapshotTipGetBlockCommit: {2}", snapshotTip.Index, snapshotTip.LastCommit, snapshotTipCommit);
+                _store.PutBlockCommit(tip.LastCommit);
+
                 Fork(chainId, forkedId, snapshotTipHash, tip);
 
                 _store.SetCanonicalChainId(forkedId);
@@ -165,20 +177,12 @@ namespace NineChronicles.Snapshot
                     _store.DeleteChainId(id);
                 }
 
-                tipBlockCommit = _store.GetBlockCommit(tipHash);
-                Console.WriteLine("Post-Fork: This is the block commit of original chain tip #{0} Tip.LastCommit: {1} TipGetBlockCommit: {2}", tip.Index, tip.LastCommit, tipBlockCommit);
-                var snapshotTip = _store.GetBlock<DummyAction>(snapshotTipHash);
-                var snapshotTipCommit = _store.GetBlockCommit(snapshotTipHash);
-                Console.WriteLine("Post-Fork & Before PutBlockCommit: This is the block commit of snapshot tip #{0} snapshotTip.LastCommit: {1} snapshotTipGetBlockCommit: {2}", snapshotTip.Index, snapshotTip.LastCommit, snapshotTipCommit);
-                _store.PutBlockCommit(tip.LastCommit);
                 snapshotTipCommit = _store.GetBlockCommit(snapshotTipHash);
-                var snapshotTipMinusOneHash = _store.IndexBlockHash(forkedId, snapshotTip.Index - 1);
-                var snapshotTipMinusOne = _store.GetBlock<DummyAction>((BlockHash)snapshotTipMinusOneHash!);
-                var snapshotTipMinusOneCommit = _store.GetBlockCommit((BlockHash)snapshotTipMinusOneHash);
-                Console.WriteLine("Post-Fork & After PutBlockCommit: This is the block commit of snapshot tip #{0} snapshotTip.LastCommit: {1} snapshotTipGetBlockCommit: {2}", snapshotTip.Index, snapshotTip.LastCommit, snapshotTipCommit);
-                Console.WriteLine(
-                    "Post-Fork & After PutBlockCommit: This is the block commit of snapshot tip Minus One #{0} snapshotTipMinusOne.LastCommit: {1} snapshotTipMinusOneGetBlockCommit: {2}",
-                    snapshotTipMinusOne.Index, snapshotTipMinusOne.LastCommit, snapshotTipMinusOneCommit);
+                Console.WriteLine("*** Post-Fork & After PutBlockCommit: This is the block commit of snapshot tip #{0} snapshotTip.LastCommit: {1} snapshotTipGetBlockCommit: {2}", snapshotTip.Index, snapshotTip.LastCommit, snapshotTipCommit);
+                var newChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
+                var newTip = newChain.Tip;
+                Console.WriteLine("*** FROM STORE New Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Tip Block Commit: {3}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit, snapshotTipCommit);
+                Console.WriteLine("*** FROM CHAIN New Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Tip Block Commit: {3}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit, newChain.GetBlockCommit(newTip.Hash));
                 var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
                 ImmutableHashSet<HashDigest<SHA256>> stateHashes = ImmutableHashSet<HashDigest<SHA256>>.Empty;
 
@@ -208,14 +212,9 @@ namespace NineChronicles.Snapshot
                 Console.WriteLine(data);
 
                 var latestEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
-
-                IStagePolicy<DummyAction> stagePolicy = new VolatileStagePolicy<DummyAction>();
-                IBlockPolicy<DummyAction> blockPolicy =
-                    new BlockPolicy<DummyAction>();
-                var baseChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
-                var newTip = baseChain.Tip;
-                Console.WriteLine("Original Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Latest Epoch: {3} Tip Block Commit: {4}", tip.Index, tip.Timestamp.UtcDateTime, tip.LastCommit, latestEpoch, _store.GetBlockCommit(tip.Hash));
-                Console.WriteLine("New Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Tip Block Commit: {3}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit, baseChain.GetBlockCommit(newTip.Hash));
+                Console.WriteLine("*** Original Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Latest Epoch: {3} Tip Block Commit: {4}", tip.Index, tip.Timestamp.UtcDateTime, tip.LastCommit, latestEpoch, _store.GetBlockCommit(tip.Hash));
+                Console.WriteLine("*** FROM STORE New Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Tip Block Commit: {3}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit, _store.GetBlockCommit(newTip.Hash));
+                Console.WriteLine("*** FROM CHAIN New Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Tip Block Commit: {3}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit, newChain.GetBlockCommit(newTip.Hash));
 
                 _store.Dispose();
                 _stateStore.Dispose();
@@ -565,6 +564,10 @@ namespace NineChronicles.Snapshot
         {
             var branchPoint = _store.GetBlock<DummyAction>(branchpointHash);
             _store.ForkBlockIndexes(src, dest, branchpointHash);
+            if (_store.GetBlockCommit(branchpointHash) is { } p)
+            {
+                _store.PutChainBlockCommit(dest, _store.GetBlockCommit(branchpointHash));
+            }
             _store.ForkTxNonces(src, dest);
 
             for (
