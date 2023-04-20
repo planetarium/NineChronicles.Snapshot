@@ -5,7 +5,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text;
 using Bencodex.Types;
 using Cocona;
 using Libplanet;
@@ -16,7 +15,8 @@ using Libplanet.Store;
 using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Net;
+using Libplanet.Blockchain;
+using Libplanet.Blockchain.Policies;
 
 namespace NineChronicles.Snapshot
 {
@@ -38,7 +38,7 @@ namespace NineChronicles.Snapshot
             [Option('o')]
             string outputDirectory,
             string storePath = null,
-            int blockBefore = 10,
+            int blockBefore = 1,
             SnapshotType snapshotType = SnapshotType.Partition)
         {
             try
@@ -53,6 +53,11 @@ namespace NineChronicles.Snapshot
                     "planetarium",
                     "9c"
                 );
+
+                if (blockBefore < 0)
+                {
+                    throw new CommandExitedException("The --block-before option must be greater than or equal to 0.", -1);
+                }
 
                 Directory.CreateDirectory(outputDirectory);
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
@@ -125,7 +130,38 @@ namespace NineChronicles.Snapshot
                         -1);
                 }
 
+                IStagePolicy<DummyAction> stagePolicy = new VolatileStagePolicy<DummyAction>();
+                IBlockPolicy<DummyAction> blockPolicy =
+                    new BlockPolicy<DummyAction>();
+                var originalChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
                 var tip = _store.GetBlock<DummyAction>(tipHash);
+
+                var potentialSnapshotTipIndex = tipIndex - blockBefore;
+                var potentialSnapshotTipHash = (BlockHash)_store.IndexBlockHash(chainId, potentialSnapshotTipIndex)!;
+                var snapshotTip = _store.GetBlock<DummyAction>(potentialSnapshotTipHash);
+
+                Console.WriteLine("*** Original Store Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}\n",
+                    tip.Index, tip.LastCommit, originalChain.GetBlockCommit(tipHash), _store.GetBlockCommit(tipHash));
+                Console.WriteLine("*** Potential Snapshot Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}\n",
+                    potentialSnapshotTipIndex, snapshotTip.LastCommit, originalChain.GetBlockCommit(potentialSnapshotTipHash), _store.GetBlockCommit(potentialSnapshotTipHash));
+
+                var potentialSnapshotTipBlockCommit = _store.GetBlockCommit(potentialSnapshotTipHash) ??
+                                                      originalChain.GetBlockCommit(potentialSnapshotTipHash);
+                if (potentialSnapshotTipBlockCommit != null)
+                {
+                    _store.PutBlockCommit(potentialSnapshotTipBlockCommit);
+                    _store.PutChainBlockCommit(chainId, potentialSnapshotTipBlockCommit);
+                }
+                else
+                {
+                    Console.WriteLine("There is no block commit associated with the potential snapshot tip: #{0}. Snapshot will automatically truncate 1 more block from the original chain tip.",
+                        potentialSnapshotTipIndex);
+                    blockBefore += 1;
+                    potentialSnapshotTipBlockCommit = _store.GetBlock<DummyAction>((BlockHash)_store.IndexBlockHash(chainId, tip.Index - blockBefore + 1)!).LastCommit;
+                    _store.PutBlockCommit(potentialSnapshotTipBlockCommit);
+                    _store.PutChainBlockCommit(chainId, potentialSnapshotTipBlockCommit);
+                }
+
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 BlockHash snapshotTipHash;
 
@@ -144,7 +180,6 @@ namespace NineChronicles.Snapshot
                 } while (!_stateStore.ContainsStateRoot(_store.GetBlock<DummyAction>(snapshotTipHash).StateRootHash));
 
                 var forkedId = Guid.NewGuid();
-
                 Fork(chainId, forkedId, snapshotTipHash, tip);
 
                 _store.SetCanonicalChainId(forkedId);
@@ -153,9 +188,6 @@ namespace NineChronicles.Snapshot
                     _store.DeleteChainId(id);
                 }
 
-                Console.WriteLine("This is the block commit of original chain tip #{0}: {1}", tip.Index, tip.LastCommit);
-                var snapshotTipLastCommit = _store.GetBlockCommit(snapshotTipHash);
-                Console.WriteLine("This is the block commit of snapshot tip #{0}: {1}", snapshotTipIndex, snapshotTipLastCommit);
                 var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
                 ImmutableHashSet<HashDigest<SHA256>> stateHashes = ImmutableHashSet<HashDigest<SHA256>>.Empty;
 
@@ -173,6 +205,12 @@ namespace NineChronicles.Snapshot
                     count++;
                 }
 
+                var newChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
+                var newTip = newChain.Tip;
+                var latestEpoch = (int) (newTip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
+                Console.WriteLine("*** Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}\n",
+                    newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, newChain.GetBlockCommit(newTip.Hash), _store.GetBlockCommit(newTip.Hash));
+
                 Console.WriteLine("CopyStates Start.");
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "CopyStates Start");
                 Console.WriteLine(data);
@@ -183,9 +221,6 @@ namespace NineChronicles.Snapshot
                 Console.WriteLine(stringdata);
                 data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                 Console.WriteLine(data);
-
-                var latestEpoch = (int) (tip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
-                Console.WriteLine("Tip Index: {0} Tip Timestamp: {1} Latest Epoch: {2}", tip.Index, tip.Timestamp.UtcDateTime, latestEpoch);
 
                 _store.Dispose();
                 _stateStore.Dispose();
@@ -535,6 +570,10 @@ namespace NineChronicles.Snapshot
         {
             var branchPoint = _store.GetBlock<DummyAction>(branchpointHash);
             _store.ForkBlockIndexes(src, dest, branchpointHash);
+            if (_store.GetBlockCommit(branchpointHash) is { } p)
+            {
+                _store.PutChainBlockCommit(dest, _store.GetBlockCommit(branchpointHash));
+            }
             _store.ForkTxNonces(src, dest);
 
             for (
