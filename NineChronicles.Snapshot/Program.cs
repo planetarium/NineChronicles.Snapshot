@@ -43,7 +43,7 @@ namespace NineChronicles.Snapshot
             [Option('o')]
             string outputDirectory,
             string storePath = null,
-            int blockBefore = 10,
+            int blockBefore = 1,
             SnapshotType snapshotType = SnapshotType.Partition)
         {
             try
@@ -58,6 +58,11 @@ namespace NineChronicles.Snapshot
                     "planetarium",
                     "9c"
                 );
+
+                if (blockBefore < 1)
+                {
+                    throw new CommandExitedException("The --block-before option must be greater than 0.", -1);
+                }
 
                 Directory.CreateDirectory(outputDirectory);
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
@@ -209,7 +214,7 @@ namespace NineChronicles.Snapshot
                     new BlockPolicy<DummyAction>();
                 var baseChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
                 var newTip = baseChain.Tip;
-                Console.WriteLine("Original Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Latest Epoch: {3} Tip Block Commit: {4}", tip.Index, tip.Timestamp.UtcDateTime, tip.LastCommit, latestEpoch, baseChain.GetBlockCommit(tip.Hash));
+                Console.WriteLine("Original Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Latest Epoch: {3} Tip Block Commit: {4}", tip.Index, tip.Timestamp.UtcDateTime, tip.LastCommit, latestEpoch, _store.GetBlockCommit(tip.Hash));
                 Console.WriteLine("New Tip Index: {0} Tip Timestamp: {1} Tip LastCommit: {2} Tip Block Commit: {3}", newTip.Index, newTip.Timestamp.UtcDateTime, newTip.LastCommit, baseChain.GetBlockCommit(newTip.Hash));
 
                 _store.Dispose();
