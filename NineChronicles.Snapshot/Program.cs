@@ -115,7 +115,7 @@ namespace NineChronicles.Snapshot
                 var newStateStore = new TrieStateStore(newStateKeyValueStore);
 
                 var canonicalChainId = _store.GetCanonicalChainId();
-                if (!(canonicalChainId is Guid chainId))
+                if (!(canonicalChainId is { } chainId))
                 {
                     throw new CommandExitedException("Canonical chain doesn't exist.", -1);
                 }
@@ -123,7 +123,7 @@ namespace NineChronicles.Snapshot
                 var genesisHash = _store.IterateIndexes(chainId,0, 1).First();
                 var tipHash = _store.IndexBlockHash(chainId, -1) 
                     ?? throw new CommandExitedException("The given chain seems empty.", -1);
-                if (!(_store.GetBlockIndex(tipHash) is long tipIndex))
+                if (!(_store.GetBlockIndex(tipHash) is { } tipIndex))
                 {
                     throw new CommandExitedException(
                         $"The index of {tipHash} doesn't exist.",
@@ -145,10 +145,17 @@ namespace NineChronicles.Snapshot
                 Console.WriteLine("*** Potential Snapshot Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}\n",
                     potentialSnapshotTipIndex, snapshotTip.LastCommit, originalChain.GetBlockCommit(potentialSnapshotTipHash), _store.GetBlockCommit(potentialSnapshotTipHash));
 
+                var tipBlockCommit = _store.GetBlockCommit(tipHash) ??
+                                                      originalChain.GetBlockCommit(tipHash);
                 var potentialSnapshotTipBlockCommit = _store.GetBlockCommit(potentialSnapshotTipHash) ??
                                                       originalChain.GetBlockCommit(potentialSnapshotTipHash);
+
+                // Add tip and the snapshot tip's block commit to store to avoid block validation during preloading
                 if (potentialSnapshotTipBlockCommit != null)
                 {
+                    Console.WriteLine("Adding the tip(#{0}) and the snapshot tip(#{1})'s block commit to the store", tipIndex, snapshotTip.Index);
+                    _store.PutBlockCommit(tipBlockCommit);
+                    _store.PutChainBlockCommit(chainId, tipBlockCommit);
                     _store.PutBlockCommit(potentialSnapshotTipBlockCommit);
                     _store.PutChainBlockCommit(chainId, potentialSnapshotTipBlockCommit);
                 }
@@ -158,14 +165,18 @@ namespace NineChronicles.Snapshot
                         potentialSnapshotTipIndex);
                     blockBefore += 1;
                     potentialSnapshotTipBlockCommit = _store.GetBlock<DummyAction>((BlockHash)_store.IndexBlockHash(chainId, tip.Index - blockBefore + 1)!).LastCommit;
+                    _store.PutBlockCommit(tipBlockCommit);
+                    _store.PutChainBlockCommit(chainId, tipBlockCommit);
                     _store.PutBlockCommit(potentialSnapshotTipBlockCommit);
                     _store.PutChainBlockCommit(chainId, potentialSnapshotTipBlockCommit);
                 }
 
-                var blockCommitBlock = _store.GetBlock<DummyAction>(potentialSnapshotTipHash);
-                
-                for (var i = 0; i < 5; i++)
+                var blockCommitBlock = _store.GetBlock<DummyAction>(tipHash);
+
+                // Add last block commits to store from tip until --block-before + 5 for buffer
+                for (var i = 0; i < blockBefore + 5; i++)
                 {
+                    Console.WriteLine("Adding block #{0}'s block commit to the store", blockCommitBlock.Index - 1);
                     _store.PutBlockCommit(blockCommitBlock.LastCommit);
                     _store.PutChainBlockCommit(chainId, blockCommitBlock.LastCommit);
                     blockCommitBlock = _store.GetBlock<DummyAction>((BlockHash)blockCommitBlock.PreviousHash!);
@@ -178,7 +189,7 @@ namespace NineChronicles.Snapshot
                 {
                     snapshotTipIndex++;
 
-                    if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is BlockHash hash))
+                    if (!(_store.IndexBlockHash(chainId, snapshotTipIndex) is { } hash))
                     {
                         throw new CommandExitedException(
                             $"The index {snapshotTipIndex} doesn't exist on ${chainId}.",
@@ -340,9 +351,6 @@ namespace NineChronicles.Snapshot
                     CopyStateStore(storePath, stateDirectory);
                     end = DateTimeOffset.Now;
                     stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                    Console.WriteLine(stringdata);
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    Console.WriteLine(data);
                     Console.WriteLine(stringdata);
                     data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
                     Console.WriteLine(data);
@@ -581,7 +589,7 @@ namespace NineChronicles.Snapshot
             Block<DummyAction> tip)
         {
             _store.ForkBlockIndexes(src, dest, branchpointHash);
-            if (_store.GetBlockCommit(branchpointHash) is { } p)
+            if (_store.GetBlockCommit(branchpointHash) is { })
             {
                 _store.PutChainBlockCommit(dest, _store.GetBlockCommit(branchpointHash));
             }
@@ -589,7 +597,7 @@ namespace NineChronicles.Snapshot
 
             for (
                 Block<DummyAction> block = tip;
-                block.PreviousHash is BlockHash hash
+                block.PreviousHash is { } hash
                 && !block.Hash.Equals(branchpointHash);
                 block = _store.GetBlock<DummyAction>(hash))
             {
@@ -623,20 +631,6 @@ namespace NineChronicles.Snapshot
                 Console.Error.WriteLine(e.Message);
                 return 0;
             }
-        }
-
-        private Block<T> GetLatestBlockWithTransaction<T>(Block<T> tip, RocksDBStore store)
-            where T : DummyAction, new()
-        {
-            var block = tip;
-            while(!block.Transactions.Any())
-            {
-                if (block.PreviousHash is BlockHash newHash)
-                {
-                    block = store.GetBlock<T>(newHash);
-                }
-            }
-            return block;
         }
 
         private void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
