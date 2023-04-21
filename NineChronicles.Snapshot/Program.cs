@@ -162,6 +162,15 @@ namespace NineChronicles.Snapshot
                     _store.PutChainBlockCommit(chainId, potentialSnapshotTipBlockCommit);
                 }
 
+                var blockCommitBlock = _store.GetBlock<DummyAction>(potentialSnapshotTipHash);
+                
+                for (var i = 0; i < 5; i++)
+                {
+                    _store.PutBlockCommit(blockCommitBlock.LastCommit);
+                    _store.PutChainBlockCommit(chainId, blockCommitBlock.LastCommit);
+                    blockCommitBlock = _store.GetBlock<DummyAction>((BlockHash)blockCommitBlock.PreviousHash!);
+                }
+
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
                 BlockHash snapshotTipHash;
 
@@ -189,7 +198,8 @@ namespace NineChronicles.Snapshot
                 }
 
                 var snapshotTipDigest = _store.GetBlockDigest(snapshotTipHash);
-                ImmutableHashSet<HashDigest<SHA256>> stateHashes = ImmutableHashSet<HashDigest<SHA256>>.Empty;
+                var snapshotTipStateRootHash = _store.GetStateRootHash(snapshotTipHash);
+                ImmutableHashSet<HashDigest<SHA256>> stateHashes = ImmutableHashSet<HashDigest<SHA256>>.Empty.Add((HashDigest<SHA256>)snapshotTipStateRootHash!);
 
                 // Get 2 block digest before snapshot tip using snapshot previous block hash.
                 BlockHash? previousBlockHash = snapshotTipDigest?.Hash;
@@ -224,6 +234,8 @@ namespace NineChronicles.Snapshot
 
                 _store.Dispose();
                 _stateStore.Dispose();
+                stateKeyValueStore.Dispose();
+                newStateStore.Dispose();
                 newStateKeyValueStore.Dispose();
 
                 Console.WriteLine("Move States Start.");
@@ -568,7 +580,6 @@ namespace NineChronicles.Snapshot
             BlockHash branchpointHash,
             Block<DummyAction> tip)
         {
-            var branchPoint = _store.GetBlock<DummyAction>(branchpointHash);
             _store.ForkBlockIndexes(src, dest, branchpointHash);
             if (_store.GetBlockCommit(branchpointHash) is { } p)
             {
