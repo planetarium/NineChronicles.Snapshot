@@ -151,9 +151,9 @@ namespace NineChronicles.Snapshot
                 var potentialSnapshotTipHash = (BlockHash)_store.IndexBlockHash(chainId, potentialSnapshotTipIndex)!;
                 var snapshotTip = _store.GetBlock<DummyAction>(potentialSnapshotTipHash);
 
-                _logger.Debug("*** Original Store Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
+                _logger.Debug("Original Store Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
                     tip.Index, tip.LastCommit, originalChain.GetBlockCommit(tipHash), _store.GetBlockCommit(tipHash));
-                _logger.Debug("*** Potential Snapshot Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
+                _logger.Debug("Potential Snapshot Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
                     potentialSnapshotTipIndex, snapshotTip.LastCommit, originalChain.GetBlockCommit(potentialSnapshotTipHash), _store.GetBlockCommit(potentialSnapshotTipHash));
 
                 var tipBlockCommit = _store.GetBlockCommit(tipHash) ??
@@ -240,7 +240,7 @@ namespace NineChronicles.Snapshot
                 var newChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
                 var newTip = newChain.Tip;
                 var latestEpoch = (int) (newTip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
-                _logger.Debug("*** Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
+                _logger.Debug("Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
                     newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, newChain.GetBlockCommit(newTip.Hash), _store.GetBlockCommit(newTip.Hash));
 
                 _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Start.");
