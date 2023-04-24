@@ -11,7 +11,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0-preview.3.23174.8" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="1.1.0" />
-    <PackageReference Include="Serilog.Settings.Configuration" Version="3.3.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="3.4.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.1.1-dev-00910" />
   </ItemGroup>
   
