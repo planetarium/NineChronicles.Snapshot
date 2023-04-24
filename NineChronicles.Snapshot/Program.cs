@@ -17,6 +17,9 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
+using Microsoft.Extensions.Configuration;
+using Serilog;
+using ILogger = Serilog.ILogger;
 
 namespace NineChronicles.Snapshot
 {
@@ -24,6 +27,7 @@ namespace NineChronicles.Snapshot
     {
         private RocksDBStore _store;
         private TrieStateStore _stateStore;
+        private ILogger _logger;
 
         public enum SnapshotType { Full, Partition, All }
 
@@ -43,11 +47,18 @@ namespace NineChronicles.Snapshot
         {
             try
             {
-                var data = String.Format("Create Snapshot-{0} start.", snapshotType.ToString());
-                Console.WriteLine(data);
+                var configurationBuilder = new ConfigurationBuilder();
+                configurationBuilder.AddJsonFile("appsettings.json");
+                var configuration = configurationBuilder.Build();
+                var loggerConf = new LoggerConfiguration()
+                    .ReadFrom.Configuration(configuration);
+                _logger = loggerConf.CreateLogger();
+
+                var snapshotStart = DateTimeOffset.Now;
+                _logger.Debug($"Create Snapshot-{snapshotType.ToString()} start.");
+                
                 // If store changed epoch unit seconds, this will be changed too
                 const int epochUnitSeconds = 86400;
-                
                 string defaultStorePath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "planetarium",
@@ -101,11 +112,11 @@ namespace NineChronicles.Snapshot
 
                 if (RocksDBStore.MigrateChainDBFromColumnFamilies(Path.Combine(storePath, "chain")))
                 {
-                    Console.WriteLine("Successfully migrated IndexDB.");
+                    _logger.Debug("Successfully migrated IndexDB.");
                 }
                 else
                 {
-                    Console.WriteLine("Migration not required.");
+                    _logger.Debug("Migration not required.");
                 }
 
                 _store = new RocksDBStore(storePath);
@@ -140,9 +151,9 @@ namespace NineChronicles.Snapshot
                 var potentialSnapshotTipHash = (BlockHash)_store.IndexBlockHash(chainId, potentialSnapshotTipIndex)!;
                 var snapshotTip = _store.GetBlock<DummyAction>(potentialSnapshotTipHash);
 
-                Console.WriteLine("*** Original Store Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}\n",
+                _logger.Debug("*** Original Store Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
                     tip.Index, tip.LastCommit, originalChain.GetBlockCommit(tipHash), _store.GetBlockCommit(tipHash));
-                Console.WriteLine("*** Potential Snapshot Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}\n",
+                _logger.Debug("*** Potential Snapshot Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
                     potentialSnapshotTipIndex, snapshotTip.LastCommit, originalChain.GetBlockCommit(potentialSnapshotTipHash), _store.GetBlockCommit(potentialSnapshotTipHash));
 
                 var tipBlockCommit = _store.GetBlockCommit(tipHash) ??
@@ -153,7 +164,7 @@ namespace NineChronicles.Snapshot
                 // Add tip and the snapshot tip's block commit to store to avoid block validation during preloading
                 if (potentialSnapshotTipBlockCommit != null)
                 {
-                    Console.WriteLine("Adding the tip(#{0}) and the snapshot tip(#{1})'s block commit to the store", tipIndex, snapshotTip.Index);
+                    _logger.Debug("Adding the tip(#{0}) and the snapshot tip(#{1})'s block commit to the store", tipIndex, snapshotTip.Index);
                     _store.PutBlockCommit(tipBlockCommit);
                     _store.PutChainBlockCommit(chainId, tipBlockCommit);
                     _store.PutBlockCommit(potentialSnapshotTipBlockCommit);
@@ -161,7 +172,7 @@ namespace NineChronicles.Snapshot
                 }
                 else
                 {
-                    Console.WriteLine("There is no block commit associated with the potential snapshot tip: #{0}. Snapshot will automatically truncate 1 more block from the original chain tip.",
+                    _logger.Debug("There is no block commit associated with the potential snapshot tip: #{0}. Snapshot will automatically truncate 1 more block from the original chain tip.",
                         potentialSnapshotTipIndex);
                     blockBefore += 1;
                     potentialSnapshotTipBlockCommit = _store.GetBlock<DummyAction>((BlockHash)_store.IndexBlockHash(chainId, tip.Index - blockBefore + 1)!).LastCommit;
@@ -176,7 +187,7 @@ namespace NineChronicles.Snapshot
                 // Add last block commits to store from tip until --block-before + 5 for buffer
                 for (var i = 0; i < blockBefore + 5; i++)
                 {
-                    Console.WriteLine("Adding block #{0}'s block commit to the store", blockCommitBlock.Index - 1);
+                    _logger.Debug("Adding block #{0}'s block commit to the store", blockCommitBlock.Index - 1);
                     _store.PutBlockCommit(blockCommitBlock.LastCommit);
                     _store.PutChainBlockCommit(chainId, blockCommitBlock.LastCommit);
                     blockCommitBlock = _store.GetBlock<DummyAction>((BlockHash)blockCommitBlock.PreviousHash!);
@@ -229,19 +240,13 @@ namespace NineChronicles.Snapshot
                 var newChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
                 var newTip = newChain.Tip;
                 var latestEpoch = (int) (newTip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
-                Console.WriteLine("*** Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}\n",
+                _logger.Debug("*** Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
                     newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, newChain.GetBlockCommit(newTip.Hash), _store.GetBlockCommit(newTip.Hash));
 
-                Console.WriteLine("CopyStates Start.");
-                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "CopyStates Start");
-                Console.WriteLine(data);
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Start.");
                 var start = DateTimeOffset.Now;
                 _stateStore.CopyStates(stateHashes, newStateStore);
-                var end = DateTimeOffset.Now;
-                var stringdata = String.Format("CopyStates Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                Console.WriteLine(stringdata);
-                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                Console.WriteLine(data);
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                 _store.Dispose();
                 _stateStore.Dispose();
@@ -249,17 +254,11 @@ namespace NineChronicles.Snapshot
                 newStateStore.Dispose();
                 newStateKeyValueStore.Dispose();
 
-                Console.WriteLine("Move States Start.");
-                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Move States Start");
-                Console.WriteLine(data);
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Start.");
                 start = DateTimeOffset.Now;
                 Directory.Delete(statesPath, recursive: true);
                 Directory.Move(newStatesPath, statesPath);
-                end = DateTimeOffset.Now;
-                stringdata = String.Format("Move States Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                Console.WriteLine(stringdata);
-                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                Console.WriteLine(data);
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min");
 
                 var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
@@ -290,20 +289,14 @@ namespace NineChronicles.Snapshot
                     Directory.Delete(stateDirectory, true);
                 }
 
-                Console.WriteLine("Clean Store Start.");
-                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Store Start");
-                Console.WriteLine(data);
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Store Start.");
                 start = DateTimeOffset.Now;
                 CleanStore(
                     partitionSnapshotPath,
                     stateSnapshotPath,
                     fullSnapshotPath,
                     storePath);
-                end = DateTimeOffset.Now;
-                stringdata = String.Format("Clean Store Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                Console.WriteLine(stringdata);
-                data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                Console.WriteLine(data);
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Store Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
@@ -311,17 +304,11 @@ namespace NineChronicles.Snapshot
                     var storeTxPath = Path.Combine(storePath, "tx");
                     var partitionDirBlockPath = Path.Combine(partitionDirectory, "block");
                     var partitionDirTxPath = Path.Combine(partitionDirectory, "tx");
-                    Console.WriteLine("Clone Partition Directory Start.");
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone Partition Directory Start");
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Start.");
                     start = DateTimeOffset.Now;
                     CopyDirectory(storeBlockPath, partitionDirBlockPath, true);
                     CopyDirectory(storeTxPath, partitionDirTxPath, true);
-                    end = DateTimeOffset.Now;
-                    stringdata = String.Format("Clone Partition Directory Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                    Console.WriteLine(stringdata);
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                     // get epoch limit for block & tx
                     var epochLimit = GetEpochLimit(
@@ -329,69 +316,39 @@ namespace NineChronicles.Snapshot
                         currentMetadataBlockEpoch,
                         previousMetadataBlockEpoch);
 
-                    Console.WriteLine("Clean Partition Store Start.");
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clean Partition Store Start");
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Partition Store Start.");
                     start = DateTimeOffset.Now;
                     // clean epoch directories in block & tx
                     CleanEpoch(partitionDirBlockPath, epochLimit);
                     CleanEpoch(partitionDirTxPath, epochLimit);
-
                     CleanPartitionStore(partitionDirectory);
-                    end = DateTimeOffset.Now;
-                    stringdata = String.Format("Clean Partition Store Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                    Console.WriteLine(stringdata);
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Partition Store Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
-                    Console.WriteLine("Clone State Directory Start.");
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Clone State Directory Start");
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone State Directory Start.");
                     start = DateTimeOffset.Now;
                     CopyStateStore(storePath, stateDirectory);
-                    end = DateTimeOffset.Now;
-                    stringdata = String.Format("Clone State Directory Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                    Console.WriteLine(stringdata);
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone State Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
                 }
                 
                 if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
                 {
-                    Console.WriteLine("Create Full ZipFile Start.");
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create Full ZipFile Start");
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Start.");
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
-                    end = DateTimeOffset.Now;
-                    stringdata = String.Format("Create Full ZipFile Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                    Console.WriteLine(stringdata);
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
                 }
 
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
-                    Console.WriteLine("Create Partition ZipFile Start.");
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create Partition ZipFile Start");
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Start.");
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
-                    end = DateTimeOffset.Now;
-                    stringdata = String.Format("Create Partition ZipFile Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                    Console.WriteLine(stringdata);
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    Console.WriteLine(data);
-                    Console.WriteLine("Create State ZipFile Start.");
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), "Create State ZipFile Start");
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State ZipFile Start.");
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
-                    end = DateTimeOffset.Now;
-                    stringdata = String.Format("Create State Zipfile Done. Time Taken: {0} min", (end - start).TotalMinutes);
-                    Console.WriteLine(stringdata);
-                    data = String.Format("Snapshot-{0} {1}.", snapshotType.ToString(), stringdata);
-                    Console.WriteLine(data);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                     if (snapshotTipDigest is null)
                     {
@@ -418,12 +375,11 @@ namespace NineChronicles.Snapshot
                     Directory.Delete(stateDirectory, true);
                 }
 
-                data = String.Format("Create Snapshot-{0} Complete.", snapshotType.ToString());
-                Console.WriteLine(data);
+                _logger.Debug($"Create Snapshot-{snapshotType.ToString()} Complete. Time Taken: {(DateTimeOffset.Now - snapshotStart).TotalMinutes} min.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.Error(ex.Message);
             }
         }
 
@@ -628,7 +584,7 @@ namespace NineChronicles.Snapshot
             }
             catch (InvalidOperationException e)
             {
-                Console.Error.WriteLine(e.Message);
+                _logger.Debug(e.Message);
                 return 0;
             }
         }
@@ -669,7 +625,7 @@ namespace NineChronicles.Snapshot
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.Debug(ex.Message);
             }
         }
         
