@@ -582,9 +582,9 @@ namespace NineChronicles.Snapshot
                 var jsonObject = JObject.Parse(File.ReadAllText(previousMetadata)); 
                 return (int)jsonObject[epochType];
             }
-            catch (InvalidOperationException e)
+            catch (InvalidOperationException ex)
             {
-                _logger.Debug(e.Message);
+                _logger.Error(ex.Message);
                 return 0;
             }
         }
@@ -625,7 +625,7 @@ namespace NineChronicles.Snapshot
             }
             catch (Exception ex)
             {
-                _logger.Debug(ex.Message);
+                _logger.Error(ex.Message);
             }
         }
         
@@ -647,8 +647,9 @@ namespace NineChronicles.Snapshot
                     }
                 }
             }
-            catch (FormatException)
+            catch (FormatException ex)
             {
+                _logger.Error(ex.Message);
                 throw new FormatException("Epoch value is not numeric.");
             }
         }
