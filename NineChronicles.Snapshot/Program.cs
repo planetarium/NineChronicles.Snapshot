@@ -388,6 +388,7 @@ namespace NineChronicles.Snapshot
             catch (Exception ex)
             {
                 _logger.Error(ex.Message);
+                _logger.Error(ex.StackTrace);
             }
         }
 
@@ -593,6 +594,7 @@ namespace NineChronicles.Snapshot
             catch (InvalidOperationException ex)
             {
                 _logger.Error(ex.Message);
+                _logger.Error(ex.StackTrace);
                 return 0;
             }
         }
@@ -634,6 +636,7 @@ namespace NineChronicles.Snapshot
             catch (Exception ex)
             {
                 _logger.Error(ex.Message);
+                _logger.Error(ex.StackTrace);
             }
         }
         
@@ -658,6 +661,7 @@ namespace NineChronicles.Snapshot
             catch (FormatException ex)
             {
                 _logger.Error(ex.Message);
+                _logger.Error(ex.StackTrace);
                 throw new FormatException("Epoch value is not numeric.");
             }
         }
