@@ -9,6 +9,7 @@ using Bencodex.Types;
 using Cocona;
 using Libplanet;
 using Libplanet.Action;
+using Libplanet.Action.Loader;
 using Libplanet.Blocks;
 using Libplanet.RocksDBStore;
 using Libplanet.Store;
@@ -17,6 +18,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
+using Libplanet.Blockchain.Renderers.Debug;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using ILogger = Serilog.ILogger;
@@ -141,15 +143,21 @@ namespace NineChronicles.Snapshot
                         -1);
                 }
 
-                IStagePolicy<DummyAction> stagePolicy = new VolatileStagePolicy<DummyAction>();
-                IBlockPolicy<DummyAction> blockPolicy =
-                    new BlockPolicy<DummyAction>();
-                var originalChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
-                var tip = _store.GetBlock<DummyAction>(tipHash);
+                IStagePolicy stagePolicy = new VolatileStagePolicy();
+                IBlockPolicy blockPolicy =
+                    new BlockPolicy();
+                var blockChainStates = new BlockChainStates(_store, _stateStore);
+                var actionEvaluator = new ActionEvaluator(
+                    _ => blockPolicy.BlockAction,
+                    blockChainStates,
+                    new NCActionLoader(),
+                    null);
+                var originalChain = new BlockChain(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock(genesisHash), blockChainStates, actionEvaluator);
+                var tip = _store.GetBlock(tipHash);
 
                 var potentialSnapshotTipIndex = tipIndex - blockBefore;
                 var potentialSnapshotTipHash = (BlockHash)_store.IndexBlockHash(chainId, potentialSnapshotTipIndex)!;
-                var snapshotTip = _store.GetBlock<DummyAction>(potentialSnapshotTipHash);
+                var snapshotTip = _store.GetBlock(potentialSnapshotTipHash);
 
                 _logger.Debug("Original Store Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
                     tip.Index, tip.LastCommit, originalChain.GetBlockCommit(tipHash), _store.GetBlockCommit(tipHash));
@@ -175,14 +183,14 @@ namespace NineChronicles.Snapshot
                     _logger.Debug("There is no block commit associated with the potential snapshot tip: #{0}. Snapshot will automatically truncate 1 more block from the original chain tip.",
                         potentialSnapshotTipIndex);
                     blockBefore += 1;
-                    potentialSnapshotTipBlockCommit = _store.GetBlock<DummyAction>((BlockHash)_store.IndexBlockHash(chainId, tip.Index - blockBefore + 1)!).LastCommit;
+                    potentialSnapshotTipBlockCommit = _store.GetBlock((BlockHash)_store.IndexBlockHash(chainId, tip.Index - blockBefore + 1)!).LastCommit;
                     _store.PutBlockCommit(tipBlockCommit);
                     _store.PutChainBlockCommit(chainId, tipBlockCommit);
                     _store.PutBlockCommit(potentialSnapshotTipBlockCommit);
                     _store.PutChainBlockCommit(chainId, potentialSnapshotTipBlockCommit);
                 }
 
-                var blockCommitBlock = _store.GetBlock<DummyAction>(tipHash);
+                var blockCommitBlock = _store.GetBlock(tipHash);
 
                 // Add last block commits to store from tip until --block-before + 5 for buffer
                 for (var i = 0; i < blockBefore + 5; i++)
@@ -190,7 +198,7 @@ namespace NineChronicles.Snapshot
                     _logger.Debug("Adding block #{0}'s block commit to the store", blockCommitBlock.Index - 1);
                     _store.PutBlockCommit(blockCommitBlock.LastCommit);
                     _store.PutChainBlockCommit(chainId, blockCommitBlock.LastCommit);
-                    blockCommitBlock = _store.GetBlock<DummyAction>((BlockHash)blockCommitBlock.PreviousHash!);
+                    blockCommitBlock = _store.GetBlock((BlockHash)blockCommitBlock.PreviousHash!);
                 }
 
                 var snapshotTipIndex = Math.Max(tipIndex - (blockBefore + 1), 0);
@@ -208,7 +216,7 @@ namespace NineChronicles.Snapshot
                     }
 
                     snapshotTipHash = hash;
-                } while (!_stateStore.ContainsStateRoot(_store.GetBlock<DummyAction>(snapshotTipHash).StateRootHash));
+                } while (!_stateStore.ContainsStateRoot(_store.GetBlock(snapshotTipHash).StateRootHash));
 
                 var forkedId = Guid.NewGuid();
                 Fork(chainId, forkedId, snapshotTipHash, tip);
@@ -237,7 +245,7 @@ namespace NineChronicles.Snapshot
                     count++;
                 }
 
-                var newChain = new BlockChain<DummyAction>(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock<DummyAction>(genesisHash));
+                var newChain = new BlockChain(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock(genesisHash), blockChainStates, actionEvaluator);
                 var newTip = newChain.Tip;
                 var latestEpoch = (int) (newTip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
                 _logger.Debug("Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
@@ -542,7 +550,7 @@ namespace NineChronicles.Snapshot
             Guid src,
             Guid dest,
             BlockHash branchpointHash,
-            Block<DummyAction> tip)
+            Block tip)
         {
             _store.ForkBlockIndexes(src, dest, branchpointHash);
             if (_store.GetBlockCommit(branchpointHash) is { })
@@ -552,10 +560,10 @@ namespace NineChronicles.Snapshot
             _store.ForkTxNonces(src, dest);
 
             for (
-                Block<DummyAction> block = tip;
+                Block block = tip;
                 block.PreviousHash is { } hash
                 && !block.Hash.Equals(branchpointHash);
-                block = _store.GetBlock<DummyAction>(hash))
+                block = _store.GetBlock(hash))
             {
                 IEnumerable<(Address, int)> signers = block
                     .Transactions
@@ -676,11 +684,16 @@ namespace NineChronicles.Snapshot
             return jsonObject;
         }
 
-        private class DummyAction : IAction
+        public class NCActionLoader : IActionLoader
         {
-            public IValue PlainValue { get; private set; }
-            public void LoadPlainValue(IValue plainValue) { PlainValue = plainValue; }
-            public IAccountStateDelta Execute(IActionContext context) => context.PreviousStates;
+            private readonly IActionLoader _actionLoader;
+
+            public NCActionLoader()
+            {
+                _actionLoader = TypedActionLoader.Create(typeof(RenderRecord.ActionBase).Assembly, typeof(RenderRecord.ActionBase));
+            }
+
+            public IAction LoadAction(long index, IValue value) => _actionLoader.LoadAction(index, value);
         }
     }
 }
