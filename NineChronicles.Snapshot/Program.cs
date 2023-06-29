@@ -691,12 +691,6 @@ namespace NineChronicles.Snapshot
         public class NCActionLoader : IActionLoader
         {
             private readonly IActionLoader _actionLoader;
-
-            public NCActionLoader()
-            {
-                _actionLoader = TypedActionLoader.Create(typeof(RenderRecord.ActionBase).Assembly, typeof(RenderRecord.ActionBase));
-            }
-
             public IAction LoadAction(long index, IValue value) => _actionLoader.LoadAction(index, value);
         }
     }
