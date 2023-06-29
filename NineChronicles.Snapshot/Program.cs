@@ -18,7 +18,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
-using Libplanet.Blockchain.Renderers.Debug;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using ILogger = Serilog.ILogger;
@@ -691,12 +690,6 @@ namespace NineChronicles.Snapshot
         public class NCActionLoader : IActionLoader
         {
             private readonly IActionLoader _actionLoader;
-
-            public NCActionLoader()
-            {
-                _actionLoader = TypedActionLoader.Create(typeof(RenderRecord.ActionBase).Assembly, typeof(RenderRecord.ActionBase));
-            }
-
             public IAction LoadAction(long index, IValue value) => _actionLoader.LoadAction(index, value);
         }
     }
