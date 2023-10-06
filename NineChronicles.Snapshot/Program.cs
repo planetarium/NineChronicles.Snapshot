@@ -7,18 +7,18 @@ using System.Linq;
 using System.Security.Cryptography;
 using Bencodex.Types;
 using Cocona;
-using Libplanet;
 using Libplanet.Action;
 using Libplanet.Action.Loader;
-using Libplanet.Blocks;
+using Libplanet.Common;
+using Libplanet.Crypto;
 using Libplanet.RocksDBStore;
 using Libplanet.Store;
 using Libplanet.Store.Trie;
+using Libplanet.Types.Blocks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
-using Libplanet.Blockchain.Renderers.Debug;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using ILogger = Serilog.ILogger;
@@ -58,7 +58,7 @@ namespace NineChronicles.Snapshot
 
                 var snapshotStart = DateTimeOffset.Now;
                 _logger.Debug($"Create Snapshot-{snapshotType.ToString()} start.");
-                
+
                 // If store changed epoch unit seconds, this will be changed too
                 const int epochUnitSeconds = 86400;
                 string defaultStorePath = Path.Combine(
@@ -134,7 +134,7 @@ namespace NineChronicles.Snapshot
                 }
 
                 var genesisHash = _store.IterateIndexes(chainId,0, 1).First();
-                var tipHash = _store.IndexBlockHash(chainId, -1) 
+                var tipHash = _store.IndexBlockHash(chainId, -1)
                     ?? throw new CommandExitedException("The given chain seems empty.", -1);
                 if (!(_store.GetBlockIndex(tipHash) is { } tipIndex))
                 {
@@ -150,8 +150,7 @@ namespace NineChronicles.Snapshot
                 var actionEvaluator = new ActionEvaluator(
                     _ => blockPolicy.BlockAction,
                     blockChainStates,
-                    new NCActionLoader(),
-                    null);
+                    new NCActionLoader());
                 var originalChain = new BlockChain(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock(genesisHash), blockChainStates, actionEvaluator);
                 var tip = _store.GetBlock(tipHash);
 
@@ -337,7 +336,7 @@ namespace NineChronicles.Snapshot
                     CopyStateStore(storePath, stateDirectory);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone State Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
                 }
-                
+
                 if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
                 {
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Start.");
@@ -588,7 +587,7 @@ namespace NineChronicles.Snapshot
                     .Where(x => Path.GetExtension(x) == ".json")
                     .OrderByDescending(x => File.GetLastWriteTime(x))
                     .First();
-                var jsonObject = JObject.Parse(File.ReadAllText(previousMetadata)); 
+                var jsonObject = JObject.Parse(File.ReadAllText(previousMetadata));
                 return (int)jsonObject[epochType];
             }
             catch (InvalidOperationException ex)
@@ -639,7 +638,7 @@ namespace NineChronicles.Snapshot
                 _logger.Error(ex.StackTrace);
             }
         }
-        
+
         private void CleanEpoch(string path, int epochLimit)
         {
             string[] directories = Directory.GetDirectories(
