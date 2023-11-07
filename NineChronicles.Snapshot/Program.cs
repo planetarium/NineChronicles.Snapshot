@@ -10,7 +10,7 @@ using Cocona;
 using Libplanet;
 using Libplanet.Action;
 using Libplanet.Action.Loader;
-using Libplanet.Blocks;
+using Libplanet.Types.Blocks;
 using Libplanet.RocksDBStore;
 using Libplanet.Store;
 using Libplanet.Store.Trie;
@@ -19,6 +19,8 @@ using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
 using Libplanet.Blockchain.Renderers.Debug;
+using Libplanet.Common;
+using Libplanet.Crypto;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using ILogger = Serilog.ILogger;
@@ -149,9 +151,9 @@ namespace NineChronicles.Snapshot
                 var blockChainStates = new BlockChainStates(_store, _stateStore);
                 var actionEvaluator = new ActionEvaluator(
                     _ => blockPolicy.BlockAction,
-                    blockChainStates,
-                    new NCActionLoader(),
-                    null);
+                    _stateStore,
+                    new NCActionLoader()
+                    );
                 var originalChain = new BlockChain(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock(genesisHash), blockChainStates, actionEvaluator);
                 var tip = _store.GetBlock(tipHash);
 
@@ -216,7 +218,7 @@ namespace NineChronicles.Snapshot
                     }
 
                     snapshotTipHash = hash;
-                } while (!_stateStore.ContainsStateRoot(_store.GetBlock(snapshotTipHash).StateRootHash));
+                } while (!_stateStore.GetStateRoot(_store.GetBlock(snapshotTipHash).StateRootHash).Recorded);
 
                 var forkedId = Guid.NewGuid();
                 Fork(chainId, forkedId, snapshotTipHash, tip);

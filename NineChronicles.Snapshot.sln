@@ -6,6 +6,16 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet", "libplanet\Libp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet.RocksDBStore", "libplanet\Libplanet.RocksDBStore\Libplanet.RocksDBStore.csproj", "{A87BF80A-6B59-4E13-9330-826394294DFA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet.Action", "libplanet\Libplanet.Action\Libplanet.Action.csproj", "{70D0513D-55C0-4A6B-8186-3F8C5E7C6D65}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet.Common", "libplanet\Libplanet.Common\Libplanet.Common.csproj", "{3422BA20-1571-4CCC-ABD1-E3FBEB77A7B2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet.Crypto", "libplanet\Libplanet.Crypto\Libplanet.Crypto.csproj", "{B22E9ECE-6B02-4D34-B504-DBB17E700983}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet.Types", "libplanet\Libplanet.Types\Libplanet.Types.csproj", "{49CC98D6-8B5C-4CB9-8CC7-F50582D59B9F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Libplanet.Store", "libplanet\Libplanet.Store\Libplanet.Store.csproj", "{9BD055DB-8523-4D86-BE1B-F67CEF537EBF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +34,25 @@ Global
 		{A87BF80A-6B59-4E13-9330-826394294DFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A87BF80A-6B59-4E13-9330-826394294DFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A87BF80A-6B59-4E13-9330-826394294DFA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{70D0513D-55C0-4A6B-8186-3F8C5E7C6D65}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{70D0513D-55C0-4A6B-8186-3F8C5E7C6D65}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{70D0513D-55C0-4A6B-8186-3F8C5E7C6D65}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{70D0513D-55C0-4A6B-8186-3F8C5E7C6D65}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3422BA20-1571-4CCC-ABD1-E3FBEB77A7B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3422BA20-1571-4CCC-ABD1-E3FBEB77A7B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3422BA20-1571-4CCC-ABD1-E3FBEB77A7B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3422BA20-1571-4CCC-ABD1-E3FBEB77A7B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B22E9ECE-6B02-4D34-B504-DBB17E700983}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B22E9ECE-6B02-4D34-B504-DBB17E700983}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B22E9ECE-6B02-4D34-B504-DBB17E700983}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B22E9ECE-6B02-4D34-B504-DBB17E700983}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49CC98D6-8B5C-4CB9-8CC7-F50582D59B9F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49CC98D6-8B5C-4CB9-8CC7-F50582D59B9F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49CC98D6-8B5C-4CB9-8CC7-F50582D59B9F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49CC98D6-8B5C-4CB9-8CC7-F50582D59B9F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9BD055DB-8523-4D86-BE1B-F67CEF537EBF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9BD055DB-8523-4D86-BE1B-F67CEF537EBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9BD055DB-8523-4D86-BE1B-F67CEF537EBF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9BD055DB-8523-4D86-BE1B-F67CEF537EBF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
