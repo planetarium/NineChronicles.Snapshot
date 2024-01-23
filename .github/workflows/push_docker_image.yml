@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - upgrade*
 
 env:
   DOCKER_REPO: planetariumhq/ninechronicles-snapshot
