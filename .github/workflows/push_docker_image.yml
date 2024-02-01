@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - upgrade/libplanet-4.0
 
 env:
   DOCKER_REPO: planetariumhq/ninechronicles-snapshot
