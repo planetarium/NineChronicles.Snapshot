@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - test
+      - test-240708
 
 env:
   DOCKER_REPO: planetariumhq/ninechronicles-snapshot
