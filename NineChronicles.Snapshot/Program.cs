@@ -136,7 +136,7 @@ namespace NineChronicles.Snapshot
                 }
 
                 var genesisHash = _store.IterateIndexes(chainId,0, 1).First();
-                var tipHash = _store.IndexBlockHash(chainId, -1) 
+                var tipHash = _store.IndexBlockHash(chainId, -2) 
                     ?? throw new CommandExitedException("The given chain seems empty.", -1);
                 if (!(_store.GetBlockIndex(tipHash) is { } tipIndex))
                 {
