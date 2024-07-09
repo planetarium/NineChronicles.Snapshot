@@ -154,7 +154,6 @@ namespace NineChronicles.Snapshot
                     _stateStore,
                     new NCActionLoader()
                     );
-                var originalChain = new BlockChain(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock(genesisHash), blockChainStates, actionEvaluator);
                 var tip = _store.GetBlock(tipHash);
 
                 var potentialSnapshotTipIndex = tipIndex - blockBefore;
@@ -162,14 +161,14 @@ namespace NineChronicles.Snapshot
                 var snapshotTip = _store.GetBlock(potentialSnapshotTipHash);
 
                 _logger.Debug("Original Store Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
-                    tip.Index, tip.LastCommit, originalChain.GetBlockCommit(tipHash), _store.GetBlockCommit(tipHash));
+                    tip.Index, tip.LastCommit, GetChainBlockCommit(tipHash, chainId), _store.GetBlockCommit(tipHash));
                 _logger.Debug("Potential Snapshot Tip: #{0}\n1. LastCommit: {1}\n2. BlockCommit in Chain: {2}\n3. BlockCommit in Store: {3}",
-                    potentialSnapshotTipIndex, snapshotTip.LastCommit, originalChain.GetBlockCommit(potentialSnapshotTipHash), _store.GetBlockCommit(potentialSnapshotTipHash));
+                    potentialSnapshotTipIndex, snapshotTip.LastCommit, GetChainBlockCommit(potentialSnapshotTipHash, chainId), _store.GetBlockCommit(potentialSnapshotTipHash));
 
                 var tipBlockCommit = _store.GetBlockCommit(tipHash) ??
-                                                      originalChain.GetBlockCommit(tipHash);
+                    GetChainBlockCommit(tipHash, chainId);
                 var potentialSnapshotTipBlockCommit = _store.GetBlockCommit(potentialSnapshotTipHash) ??
-                                                      originalChain.GetBlockCommit(potentialSnapshotTipHash);
+                    GetChainBlockCommit(potentialSnapshotTipHash, chainId);
 
                 // Add tip and the snapshot tip's block commit to store to avoid block validation during preloading
                 if (potentialSnapshotTipBlockCommit != null)
@@ -247,11 +246,12 @@ namespace NineChronicles.Snapshot
                     count++;
                 }
 
-                var newChain = new BlockChain(blockPolicy, stagePolicy, _store, _stateStore, _store.GetBlock(genesisHash), blockChainStates, actionEvaluator);
-                var newTip = newChain.Tip;
+                var newTipHash = _store.IndexBlockHash(forkedId, -1)
+                    ?? throw new CommandExitedException("The given chain seems empty.", -1);
+                var newTip = _store.GetBlock(newTipHash);
                 var latestEpoch = (int) (newTip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
                 _logger.Debug("Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
-                    newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, newChain.GetBlockCommit(newTip.Hash), _store.GetBlockCommit(newTip.Hash));
+                    newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, GetChainBlockCommit(newTip.Hash, forkedId), _store.GetBlockCommit(newTip.Hash));
 
                 _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Start.");
                 var start = DateTimeOffset.Now;
@@ -691,6 +691,39 @@ namespace NineChronicles.Snapshot
             }
 
             return jsonObject;
+        }
+
+        private BlockCommit GetChainBlockCommit(BlockHash blockHash, Guid chainId)
+        {
+            var tipHash = _store.IndexBlockHash(chainId, -1)
+                ?? throw new CommandExitedException("The given chain seems empty.", -1);
+            if (!(_store.GetBlockIndex(tipHash) is { } tipIndex))
+            {
+                throw new CommandExitedException(
+                    $"The index of {tipHash} doesn't exist.",
+                    -1);
+            }
+
+            if (!(_store.GetBlockIndex(blockHash) is { } blockIndex))
+            {
+                throw new CommandExitedException(
+                    $"The index of {blockHash} doesn't exist.",
+                    -1);
+            }
+
+            if (blockIndex == tipIndex)
+            {
+                return _store.GetChainBlockCommit(chainId);
+            }
+
+            if (!(_store.IndexBlockHash(chainId, blockIndex + 1) is { } nextHash))
+            {
+                throw new CommandExitedException(
+                    $"The hash of index {blockIndex + 1} doesn't exist.",
+                    -1);
+            }
+
+            return _store.GetBlock(nextHash).LastCommit;
         }
 
         public class NCActionLoader : IActionLoader
