@@ -16,8 +16,8 @@
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\libplanet\Libplanet\Libplanet.csproj" />
-    <ProjectReference Include="..\libplanet\Libplanet.RocksDBStore\Libplanet.RocksDBStore.csproj" />
+    <ProjectReference Include="..\libplanet\src\Libplanet\Libplanet.csproj" />
+    <ProjectReference Include="..\libplanet\src\Libplanet.RocksDBStore\Libplanet.RocksDBStore.csproj" />
   </ItemGroup>
 
   <ItemGroup>
