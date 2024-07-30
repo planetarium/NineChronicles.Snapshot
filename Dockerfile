@@ -2,8 +2,8 @@ FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build-env
 WORKDIR /app
 ARG COMMIT
 
-COPY ./libplanet/Libplanet/Libplanet.csproj ./Libplanet/
-COPY ./libplanet/Libplanet.RocksDBStore/Libplanet.RocksDBStore.csproj ./Libplanet.RocksDBStore/
+COPY ./libplanet/src/Libplanet/Libplanet.csproj ./Libplanet/
+COPY ./libplanet/src/Libplanet.RocksDBStore/Libplanet.RocksDBStore.csproj ./Libplanet.RocksDBStore/
 COPY ./NineChronicles.Snapshot/NineChronicles.Snapshot.csproj ./NineChronicles.Snapshot/
 RUN dotnet restore Libplanet
 RUN dotnet restore Libplanet.RocksDBStore
