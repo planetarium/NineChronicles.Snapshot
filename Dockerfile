@@ -25,7 +25,12 @@ RUN dotnet publish NineChronicles.Snapshot/NineChronicles.Snapshot.csproj \
 # Build runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:6.0
 WORKDIR /app
-RUN apt-get update && apt-get install -y libc6-dev
+RUN apt-get update && apt-get install -y \
+    libc6-dev \
+    librocksdb-dev \
+    libsnappy-dev \
+    liblz4-dev \
+    libzstd-dev
 COPY --from=build-env /app/out .
 
 VOLUME /data
