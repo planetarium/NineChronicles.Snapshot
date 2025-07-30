@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -7,7 +7,6 @@ using System.Linq;
 using System.Security.Cryptography;
 using Bencodex.Types;
 using Cocona;
-using Libplanet;
 using Libplanet.Action;
 using Libplanet.Action.Loader;
 using Libplanet.Types.Blocks;
@@ -18,7 +17,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
-using Libplanet.Blockchain.Renderers.Debug;
 using Libplanet.Common;
 using Libplanet.Crypto;
 using Microsoft.Extensions.Configuration;
@@ -60,7 +58,7 @@ namespace NineChronicles.Snapshot
 
                 var snapshotStart = DateTimeOffset.Now;
                 _logger.Debug($"Create Snapshot-{snapshotType.ToString()} start.");
-                
+
                 // If store changed epoch unit seconds, this will be changed too
                 const int epochUnitSeconds = 86400;
                 string defaultStorePath = Path.Combine(
@@ -105,7 +103,7 @@ namespace NineChronicles.Snapshot
                 var stateHashesPath = Path.Combine(storePath, "state_hashes");
 
                 var staleDirectories =
-                new [] { mainPath, statePath, stateRefPath, stateHashesPath};
+                new[] { mainPath, statePath, stateRefPath, stateHashesPath };
                 foreach (var staleDirectory in staleDirectories)
                 {
                     if (Directory.Exists(staleDirectory))
@@ -135,8 +133,8 @@ namespace NineChronicles.Snapshot
                     throw new CommandExitedException("Canonical chain doesn't exist.", -1);
                 }
 
-                var genesisHash = _store.IterateIndexes(chainId,0, 1).First();
-                var tipHash = _store.IndexBlockHash(chainId, -1) 
+                var genesisHash = _store.IterateIndexes(chainId, 0, 1).First();
+                var tipHash = _store.IndexBlockHash(chainId, -1)
                     ?? throw new CommandExitedException("The given chain seems empty.", -1);
                 if (!(_store.GetBlockIndex(tipHash) is { } tipIndex))
                 {
@@ -249,7 +247,7 @@ namespace NineChronicles.Snapshot
                 var newTipHash = _store.IndexBlockHash(forkedId, -1)
                     ?? throw new CommandExitedException("The given chain seems empty.", -1);
                 var newTip = _store.GetBlock(newTipHash);
-                var latestEpoch = (int) (newTip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
+                var latestEpoch = (int)(newTip.Timestamp.ToUnixTimeSeconds() / epochUnitSeconds);
                 _logger.Debug("Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
                     newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, GetChainBlockCommit(newTip.Hash, forkedId), _store.GetBlockCommit(newTip.Hash));
 
@@ -263,6 +261,12 @@ namespace NineChronicles.Snapshot
                 stateKeyValueStore.Dispose();
                 newStateStore.Dispose();
                 newStateKeyValueStore.Dispose();
+
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} Determining State Sizes Start.");
+                var statesPathSize = Directory.GetFiles(statesPath, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
+                var newStatesPathSize = Directory.GetFiles(newStatesPath, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} Previous States Size: {(float)statesPathSize / 1024 / 1024 / 1024} GiB");
+                _logger.Debug($"Snapshot-{snapshotType.ToString()} New States Size: {(float)newStatesPathSize / 1024 / 1024 / 1024} GiB");
 
                 _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Start.");
                 start = DateTimeOffset.Now;
@@ -339,7 +343,7 @@ namespace NineChronicles.Snapshot
                     CopyStateStore(storePath, stateDirectory);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone State Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
                 }
-                
+
                 if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
                 {
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Start.");
@@ -527,7 +531,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private void CopyStateStore(string storePath,string stateDirectory)
+        private void CopyStateStore(string storePath, string stateDirectory)
         {
             var storeBlockIndexPath = Path.Combine(storePath, "block", "blockindex");
             var storeTxIndexPath = Path.Combine(storePath, "tx", "txindex");
@@ -593,7 +597,7 @@ namespace NineChronicles.Snapshot
                     .Where(x => Path.GetExtension(x) == ".json")
                     .OrderByDescending(x => File.GetLastWriteTime(x))
                     .First();
-                var jsonObject = JObject.Parse(File.ReadAllText(previousMetadata)); 
+                var jsonObject = JObject.Parse(File.ReadAllText(previousMetadata));
                 return (int)jsonObject[epochType];
             }
             catch (InvalidOperationException ex)
@@ -644,7 +648,7 @@ namespace NineChronicles.Snapshot
                 _logger.Error(ex.StackTrace);
             }
         }
-        
+
         private void CleanEpoch(string path, int epochLimit)
         {
             string[] directories = Directory.GetDirectories(
