@@ -43,6 +43,8 @@ namespace NineChronicles.Snapshot
             string apv,
             [Option('o')]
             string outputDirectory,
+            [Option("bypass-copystates")]
+            bool bypassCopyStates = false,
             string storePath = null,
             int blockBefore = 1,
             SnapshotType snapshotType = SnapshotType.Partition)
@@ -251,28 +253,35 @@ namespace NineChronicles.Snapshot
                 _logger.Debug("Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
                     newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, GetChainBlockCommit(newTip.Hash, forkedId), _store.GetBlockCommit(newTip.Hash));
 
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Start.");
                 var start = DateTimeOffset.Now;
-                _stateStore.CopyStates(stateHashes, newStateStore);
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                if (bypassCopyStates)
+                {
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Skipped.");
+                }
+                else
+                {
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Start.");
+                    _stateStore.CopyStates(stateHashes, newStateStore);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Determining State Sizes Start.");
+                    var statesPathSize = Directory.GetFiles(statesPath, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
+                    var newStatesPathSize = Directory.GetFiles(newStatesPath, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Previous States Size: {(float)statesPathSize / 1024 / 1024 / 1024} GiB");
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} New States Size: {(float)newStatesPathSize / 1024 / 1024 / 1024} GiB");
+
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Start.");
+                    start = DateTimeOffset.Now;
+                    Directory.Delete(statesPath, recursive: true);
+                    Directory.Move(newStatesPath, statesPath);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min");
+                }
 
                 _store.Dispose();
                 _stateStore.Dispose();
                 stateKeyValueStore.Dispose();
                 newStateStore.Dispose();
                 newStateKeyValueStore.Dispose();
-
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} Determining State Sizes Start.");
-                var statesPathSize = Directory.GetFiles(statesPath, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
-                var newStatesPathSize = Directory.GetFiles(newStatesPath, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} Previous States Size: {(float)statesPathSize / 1024 / 1024 / 1024} GiB");
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} New States Size: {(float)newStatesPathSize / 1024 / 1024 / 1024} GiB");
-
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Start.");
-                start = DateTimeOffset.Now;
-                Directory.Delete(statesPath, recursive: true);
-                Directory.Move(newStatesPath, statesPath);
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min");
 
                 var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
