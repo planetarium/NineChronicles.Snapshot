@@ -33,6 +33,16 @@ namespace NineChronicles.Snapshot
 
         public enum SnapshotType { Full, Partition, All }
 
+        private static readonly List<string> STATE_PATHS = new List<string>() {
+            Path.Combine("block", "blockindex"),
+            Path.Combine("tx", "txindex"),
+            Path.Combine("txbindex"),
+            Path.Combine("states"),
+            Path.Combine("chain"),
+            Path.Combine("blockcommit"),
+            Path.Combine("txexec")
+        };
+
         static void Main(string[] args)
         {
             CoconaLiteApp.Run<Program>(args);
@@ -74,6 +84,11 @@ namespace NineChronicles.Snapshot
                     throw new CommandExitedException("The --block-before option must be greater than or equal to 0.", -1);
                 }
 
+                if (STATE_PATHS.Any(path => File.Exists(Path.Combine(storePath, path, "LOCK"))))
+                {
+                    throw new Exception("LOCK file exists");
+                }
+
                 Directory.CreateDirectory(outputDirectory);
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "state"));
@@ -86,7 +101,6 @@ namespace NineChronicles.Snapshot
                     : outputDirectory;
 
                 var metadataDirectory = Path.Combine(outputDirectory, "metadata");
-                var tempDirectory = Path.Combine(outputDirectory, "temp");
                 int currentMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "BlockEpoch");
                 int currentMetadataTxEpoch = GetMetaDataEpoch(metadataDirectory, "TxEpoch");
                 int previousMetadataBlockEpoch = GetMetaDataEpoch(metadataDirectory, "PreviousBlockEpoch");
@@ -253,7 +267,14 @@ namespace NineChronicles.Snapshot
                 _logger.Debug("Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
                     newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, GetChainBlockCommit(newTip.Hash, forkedId), _store.GetBlockCommit(newTip.Hash));
 
-                var start = DateTimeOffset.Now;
+                _store.Dispose();
+                _stateStore.Dispose();
+                stateKeyValueStore.Dispose();
+                newStateStore.Dispose();
+                newStateKeyValueStore.Dispose();
+
+                DateTimeOffset start;
+
                 if (bypassCopyStates)
                 {
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Skipped.");
@@ -261,6 +282,7 @@ namespace NineChronicles.Snapshot
                 else
                 {
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Start.");
+                    start = DateTimeOffset.Now;
                     _stateStore.CopyStates(stateHashes, newStateStore);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
@@ -276,12 +298,6 @@ namespace NineChronicles.Snapshot
                     Directory.Move(newStatesPath, statesPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min");
                 }
-
-                _store.Dispose();
-                _stateStore.Dispose();
-                stateKeyValueStore.Dispose();
-                newStateStore.Dispose();
-                newStateKeyValueStore.Dispose();
 
                 var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
@@ -299,8 +315,10 @@ namespace NineChronicles.Snapshot
                 var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
                 var stateSnapshotFilename = $"{stateBaseFilename}.zip";
                 var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
-                string partitionDirectory = Path.Combine(tempDirectory, "snapshot");
-                string stateDirectory = Path.Combine(tempDirectory, "state");
+
+                var tempDirectory = Path.Combine(storePath, "temp");
+                var partitionDirectory = Path.Combine(tempDirectory, "snapshot");
+                var stateDirectory = Path.Combine(tempDirectory, "state");
 
                 if (Directory.Exists(partitionDirectory))
                 {
@@ -321,38 +339,6 @@ namespace NineChronicles.Snapshot
                     storePath);
                 _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Store Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
-                if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
-                {
-                    var storeBlockPath = Path.Combine(storePath, "block");
-                    var storeTxPath = Path.Combine(storePath, "tx");
-                    var partitionDirBlockPath = Path.Combine(partitionDirectory, "block");
-                    var partitionDirTxPath = Path.Combine(partitionDirectory, "tx");
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Start.");
-                    start = DateTimeOffset.Now;
-                    CopyDirectory(storeBlockPath, partitionDirBlockPath, true);
-                    CopyDirectory(storeTxPath, partitionDirTxPath, true);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                    // get epoch limit for block & tx
-                    var epochLimit = GetEpochLimit(
-                        latestEpoch,
-                        currentMetadataBlockEpoch,
-                        previousMetadataBlockEpoch);
-
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Partition Store Start.");
-                    start = DateTimeOffset.Now;
-                    // clean epoch directories in block & tx
-                    CleanEpoch(partitionDirBlockPath, epochLimit);
-                    CleanEpoch(partitionDirTxPath, epochLimit);
-                    CleanPartitionStore(partitionDirectory);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Partition Store Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone State Directory Start.");
-                    start = DateTimeOffset.Now;
-                    CopyStateStore(storePath, stateDirectory);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone State Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-                }
-
                 if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
                 {
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Start.");
@@ -363,15 +349,49 @@ namespace NineChronicles.Snapshot
 
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
+                    var storeBlockPath = Path.Combine(storePath, "block");
+                    var storeTxPath = Path.Combine(storePath, "tx");
+                    var partitionDirBlockPath = Path.Combine(partitionDirectory, "block");
+                    var partitionDirTxPath = Path.Combine(partitionDirectory, "tx");
+
+                    var epochLimit = GetEpochLimit(
+                        latestEpoch,
+                        currentMetadataBlockEpoch,
+                        previousMetadataBlockEpoch);
+
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Start.");
+                    start = DateTimeOffset.Now;
+                    CopyDirectory(storeBlockPath, partitionDirBlockPath, epochLimit: epochLimit);
+                    CopyDirectory(storeTxPath, partitionDirTxPath, epochLimit: epochLimit);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Start.");
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
+                    Directory.Delete(partitionDirectory, true);
+
+                    STATE_PATHS.ForEach(path => File.Create(Path.Combine(storePath, path, "LOCK")));
+
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move State Directory Start.");
+                    start = DateTimeOffset.Now;
+                    MoveStateStore(storePath, stateDirectory);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move State Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+
+                    STATE_PATHS.ForEach(path => File.Delete(Path.Combine(stateDirectory, path, "LOCK")));
+
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State ZipFile Start.");
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Restore State Directory Start.");
+                    start = DateTimeOffset.Now;
+                    MoveStateStore(stateDirectory, storePath);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Restore State Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+
+                    Directory.Delete(stateDirectory, true);
 
                     if (snapshotTipDigest is null)
                     {
@@ -394,8 +414,6 @@ namespace NineChronicles.Snapshot
                     }
 
                     File.WriteAllText(metadataPath, stringfyMetadata);
-                    Directory.Delete(partitionDirectory, true);
-                    Directory.Delete(stateDirectory, true);
                 }
 
                 _logger.Debug($"Create Snapshot-{snapshotType.ToString()} Complete. Time Taken: {(DateTimeOffset.Now - snapshotStart).TotalMinutes} min.");
@@ -540,29 +558,9 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private void CopyStateStore(string storePath, string stateDirectory)
+        private void MoveStateStore(string src, string dst)
         {
-            var storeBlockIndexPath = Path.Combine(storePath, "block", "blockindex");
-            var storeTxIndexPath = Path.Combine(storePath, "tx", "txindex");
-            var storeTxBIndexPath = Path.Combine(storePath, "txbindex");
-            var storeStatesPath = Path.Combine(storePath, "states");
-            var storeChainPath = Path.Combine(storePath, "chain");
-            var storeBlockCommitPath = Path.Combine(storePath, "blockcommit");
-            var storeTxExecPath = Path.Combine(storePath, "txexec");
-            var stateDirBlockIndexPath = Path.Combine(stateDirectory, "block", "blockindex");
-            var stateDirTxIndexPath = Path.Combine(stateDirectory, "tx", "txindex");
-            var stateDirTxBIndexPath = Path.Combine(stateDirectory, "txbindex");
-            var stateDirStatesPath = Path.Combine(stateDirectory, "states");
-            var stateDirChainPath = Path.Combine(stateDirectory, "chain");
-            var stateDirBlockCommitPath = Path.Combine(stateDirectory, "blockcommit");
-            var stateDirTxExecPath = Path.Combine(stateDirectory, "txexec");
-            CopyDirectory(storeBlockIndexPath, stateDirBlockIndexPath, true);
-            CopyDirectory(storeTxIndexPath, stateDirTxIndexPath, true);
-            CopyDirectory(storeTxBIndexPath, stateDirTxBIndexPath, true);
-            CopyDirectory(storeStatesPath, stateDirStatesPath, true);
-            CopyDirectory(storeChainPath, stateDirChainPath, true);
-            CopyDirectory(storeBlockCommitPath, stateDirBlockCommitPath, true);
-            CopyDirectory(storeTxExecPath, stateDirTxExecPath, true);
+            STATE_PATHS.ForEach(path => CopyDirectory(Path.Combine(src, path), Path.Combine(dst, path), moveInsteadOfCopy: true));
         }
 
         private void Fork(
@@ -617,7 +615,7 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
+        private void CopyDirectory(string sourceDir, string destinationDir, bool recursive = true, bool moveInsteadOfCopy = false, int? epochLimit = null)
         {
             try
             {
@@ -638,7 +636,14 @@ namespace NineChronicles.Snapshot
                 foreach (FileInfo file in dir.GetFiles())
                 {
                     string targetFilePath = Path.Combine(destinationDir, file.Name);
-                    file.CopyTo(targetFilePath);
+                    if (moveInsteadOfCopy)
+                    {
+                        file.MoveTo(targetFilePath);
+                    }
+                    else
+                    {
+                        file.CopyTo(targetFilePath);
+                    }
                 }
 
                 // If recursive and copying subdirectories, recursively call this method
@@ -646,8 +651,14 @@ namespace NineChronicles.Snapshot
                 {
                     foreach (DirectoryInfo subDir in dirs)
                     {
+                        if (epochLimit.HasValue
+                            && subDir.Name.StartsWith("epoch")
+                            && int.TryParse(subDir.Name.Substring(5), out int epoch)
+                            && epoch < epochLimit.Value)
+                            continue;
+
                         string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                        CopyDirectory(subDir.FullName, newDestinationDir, true);
+                        CopyDirectory(subDir.FullName, newDestinationDir, true, moveInsteadOfCopy, epochLimit);
                     }
                 }
             }
@@ -655,32 +666,6 @@ namespace NineChronicles.Snapshot
             {
                 _logger.Error(ex.Message);
                 _logger.Error(ex.StackTrace);
-            }
-        }
-
-        private void CleanEpoch(string path, int epochLimit)
-        {
-            string[] directories = Directory.GetDirectories(
-                path,
-                "epoch*",
-                SearchOption.AllDirectories);
-            try
-            {
-                foreach (string dir in directories)
-                {
-                    string dirName = new DirectoryInfo(dir).Name;
-                    int epoch = Int32.Parse(dirName.Substring(5));
-                    if (epoch < epochLimit)
-                    {
-                        Directory.Delete(dir, true);
-                    }
-                }
-            }
-            catch (FormatException ex)
-            {
-                _logger.Error(ex.Message);
-                _logger.Error(ex.StackTrace);
-                throw new FormatException("Epoch value is not numeric.");
             }
         }
 
