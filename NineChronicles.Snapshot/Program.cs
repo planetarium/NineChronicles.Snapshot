@@ -262,12 +262,6 @@ namespace NineChronicles.Snapshot
                 _logger.Debug("Official Snapshot Tip: #{0}\n1. Timestamp: {1}\n2. Latest Epoch: {2}\n3. BlockCommit in Chain: {3}\n4. BlockCommit in Store: {4}",
                     newTip.Index, newTip.Timestamp.UtcDateTime, latestEpoch, GetChainBlockCommit(newTip.Hash, forkedId), _store.GetBlockCommit(newTip.Hash));
 
-                _store.Dispose();
-                _stateStore.Dispose();
-                stateKeyValueStore.Dispose();
-                newStateStore.Dispose();
-                newStateKeyValueStore.Dispose();
-
                 DateTimeOffset start;
 
                 if (bypassCopyStates)
@@ -293,6 +287,12 @@ namespace NineChronicles.Snapshot
                     Directory.Move(newStatesPath, statesPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min");
                 }
+
+                _store.Dispose();
+                _stateStore.Dispose();
+                stateKeyValueStore.Dispose();
+                newStateStore.Dispose();
+                newStateKeyValueStore.Dispose();
 
                 var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
