@@ -274,7 +274,16 @@ namespace NineChronicles.Snapshot
                     start = DateTimeOffset.Now;
                     _stateStore.CopyStates(stateHashes, newStateStore);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                }
 
+                _store.Dispose();
+                _stateStore.Dispose();
+                stateKeyValueStore.Dispose();
+                newStateStore.Dispose();
+                newStateKeyValueStore.Dispose();
+
+                if (Directory.Exists(newStatesPath))
+                {
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Determining State Sizes Start.");
                     var statesPathSize = Directory.GetFiles(statesPath, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
                     var newStatesPathSize = Directory.GetFiles(newStatesPath, "*", SearchOption.AllDirectories).Sum(file => new FileInfo(file).Length);
@@ -287,12 +296,6 @@ namespace NineChronicles.Snapshot
                     Directory.Move(newStatesPath, statesPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min");
                 }
-
-                _store.Dispose();
-                _stateStore.Dispose();
-                stateKeyValueStore.Dispose();
-                newStateStore.Dispose();
-                newStateKeyValueStore.Dispose();
 
                 var partitionBaseFilename = GetPartitionBaseFileName(
                     currentMetadataBlockEpoch,
