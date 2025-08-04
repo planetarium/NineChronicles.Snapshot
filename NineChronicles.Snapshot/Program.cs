@@ -113,8 +113,7 @@ namespace NineChronicles.Snapshot
                 var newStatesPath = Path.Combine(storePath, "new_states");
                 var stateHashesPath = Path.Combine(storePath, "state_hashes");
 
-                var staleDirectories =
-                new[] { mainPath, statePath, stateRefPath, stateHashesPath };
+                var staleDirectories = new[] { mainPath, statePath, stateRefPath, stateHashesPath, newStatesPath };
                 foreach (var staleDirectory in staleDirectories)
                 {
                     if (Directory.Exists(staleDirectory))
@@ -133,10 +132,8 @@ namespace NineChronicles.Snapshot
                 }
 
                 _store = new RocksDBStore(storePath);
-                IKeyValueStore stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
-                IKeyValueStore newStateKeyValueStore = new RocksDBKeyValueStore(newStatesPath);
+                var stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
                 _stateStore = new TrieStateStore(stateKeyValueStore);
-                var newStateStore = new TrieStateStore(newStateKeyValueStore);
 
                 var canonicalChainId = _store.GetCanonicalChainId();
                 if (!(canonicalChainId is { } chainId))
@@ -270,17 +267,21 @@ namespace NineChronicles.Snapshot
                 }
                 else
                 {
+                    var newStateKeyValueStore = new RocksDBKeyValueStore(newStatesPath);
+                    var newStateStore = new TrieStateStore(newStateKeyValueStore);
+
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Start.");
                     start = DateTimeOffset.Now;
                     _stateStore.CopyStates(stateHashes, newStateStore);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+
+                    newStateStore.Dispose();
+                    newStateKeyValueStore.Dispose();
                 }
 
                 _store.Dispose();
                 _stateStore.Dispose();
                 stateKeyValueStore.Dispose();
-                newStateStore.Dispose();
-                newStateKeyValueStore.Dispose();
 
                 if (Directory.Exists(newStatesPath))
                 {
