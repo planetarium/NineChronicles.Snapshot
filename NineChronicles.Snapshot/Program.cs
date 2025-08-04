@@ -84,11 +84,6 @@ namespace NineChronicles.Snapshot
                     throw new CommandExitedException("The --block-before option must be greater than or equal to 0.", -1);
                 }
 
-                if (STATE_PATHS.Any(path => File.Exists(Path.Combine(storePath, path, "LOCK"))))
-                {
-                    throw new Exception("LOCK file exists");
-                }
-
                 Directory.CreateDirectory(outputDirectory);
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "partition"));
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "state"));
