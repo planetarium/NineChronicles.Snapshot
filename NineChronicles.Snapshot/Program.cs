@@ -12,7 +12,6 @@ using Libplanet.Action.Loader;
 using Libplanet.Types.Blocks;
 using Libplanet.RocksDBStore;
 using Libplanet.Store;
-using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
@@ -358,16 +357,22 @@ namespace NineChronicles.Snapshot
                         currentMetadataBlockEpoch,
                         previousMetadataBlockEpoch);
 
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Start.");
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move Partition Directory Start.");
                     start = DateTimeOffset.Now;
-                    CopyDirectory(storeBlockPath, partitionDirBlockPath, epochLimit: epochLimit);
-                    CopyDirectory(storeTxPath, partitionDirTxPath, epochLimit: epochLimit);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                    CopyDirectory(storeBlockPath, partitionDirBlockPath, epochLimit: epochLimit, moveInsteadOfCopy: true);
+                    CopyDirectory(storeTxPath, partitionDirTxPath, epochLimit: epochLimit, moveInsteadOfCopy: true);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move Partition Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Start.");
                     start = DateTimeOffset.Now;
                     ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Restore Partition Directory Start.");
+                    start = DateTimeOffset.Now;
+                    CopyDirectory(partitionDirBlockPath, storeBlockPath, moveInsteadOfCopy: true);
+                    CopyDirectory(partitionDirTxPath, storeTxPath, moveInsteadOfCopy: true);
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Restore Partition Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                     Directory.Delete(partitionDirectory, true);
 
