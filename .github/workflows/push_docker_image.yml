@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - rc*
+      - experimental
 
 env:
   DOCKER_REPO: planetariumhq/ninechronicles-snapshot
