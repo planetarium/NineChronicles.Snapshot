@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -12,7 +13,6 @@ using Libplanet.Action.Loader;
 using Libplanet.Types.Blocks;
 using Libplanet.RocksDBStore;
 using Libplanet.Store;
-using Libplanet.Store.Trie;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
@@ -22,18 +22,18 @@ using Libplanet.Crypto;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using ILogger = Serilog.ILogger;
+using EasyCompressor;
 
 namespace NineChronicles.Snapshot
 {
     class Program
     {
-        private RocksDBStore _store;
-        private TrieStateStore _stateStore;
-        private ILogger _logger;
-
         public enum SnapshotType { Full, Partition, All }
 
-        private static readonly List<string> STATE_PATHS = new List<string>() {
+        private enum ArchiveType { Zip, TarZstd }
+
+        private static readonly List<string> STATE_PATHS = new List<string>()
+        {
             Path.Combine("block", "blockindex"),
             Path.Combine("tx", "txindex"),
             Path.Combine("txbindex"),
@@ -42,6 +42,19 @@ namespace NineChronicles.Snapshot
             Path.Combine("blockcommit"),
             Path.Combine("txexec")
         };
+
+        private static readonly IReadOnlyDictionary<ArchiveType, string> _archiveExtensions = new Dictionary<ArchiveType, string>
+        {
+            { ArchiveType.Zip, "zip" },
+            { ArchiveType.TarZstd, "tar.zst" }
+        };
+
+        private RocksDBStore _store;
+        private TrieStateStore _stateStore;
+        private ILogger _logger;
+
+        private ArchiveType _archiveType = ArchiveType.Zip;
+        private string ArchiveExtension { get => _archiveExtensions[_archiveType]; }
 
         static void Main(string[] args)
         {
@@ -55,6 +68,7 @@ namespace NineChronicles.Snapshot
             string outputDirectory,
             [Option("bypass-copystates")]
             bool bypassCopyStates = false,
+            bool zstd = false,
             string storePath = null,
             int blockBefore = 1,
             SnapshotType snapshotType = SnapshotType.Partition)
@@ -67,6 +81,16 @@ namespace NineChronicles.Snapshot
                 var loggerConf = new LoggerConfiguration()
                     .ReadFrom.Configuration(configuration);
                 _logger = loggerConf.CreateLogger();
+
+                if (zstd)
+                {
+                    _logger.Debug("Compression method: Zstd");
+                    _archiveType = ArchiveType.TarZstd;
+                }
+                else
+                {
+                    _logger.Debug("Compression method: Zip (Default)");
+                }
 
                 var snapshotStart = DateTimeOffset.Now;
                 _logger.Debug($"Create Snapshot-{snapshotType.ToString()} start.");
@@ -307,12 +331,12 @@ namespace NineChronicles.Snapshot
                 var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
                 var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
                 var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
-                var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}-{snapshotTipIndex}.zip";
+                var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}-{snapshotTipIndex}.{ArchiveExtension}";
                 var fullSnapshotPath = Path.Combine(fullSnapshotDirectory, fullSnapshotFilename);
 
-                var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
+                var partitionSnapshotFilename = $"{partitionBaseFilename}.{ArchiveExtension}";
                 var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
-                var stateSnapshotFilename = $"{stateBaseFilename}.zip";
+                var stateSnapshotFilename = $"{stateBaseFilename}.{ArchiveExtension}";
                 var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
 
                 var tempDirectory = Path.Combine(storePath, "temp");
@@ -342,7 +366,7 @@ namespace NineChronicles.Snapshot
                 {
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Start.");
                     start = DateTimeOffset.Now;
-                    ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
+                    ArchiveDirectory(storePath, fullSnapshotPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
                 }
 
@@ -366,7 +390,7 @@ namespace NineChronicles.Snapshot
 
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Start.");
                     start = DateTimeOffset.Now;
-                    ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
+                    ArchiveDirectory(partitionDirectory, partitionSnapshotPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                     Directory.Delete(partitionDirectory, true);
@@ -382,7 +406,7 @@ namespace NineChronicles.Snapshot
 
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State ZipFile Start.");
                     start = DateTimeOffset.Now;
-                    ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
+                    ArchiveDirectory(stateDirectory, stateSnapshotPath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Restore State Directory Start.");
@@ -666,6 +690,24 @@ namespace NineChronicles.Snapshot
                 _logger.Error(ex.Message);
                 _logger.Error(ex.StackTrace);
             }
+        }
+
+        private void ArchiveDirectory(string dirPath, string destPath)
+        {
+            Stream destStream = File.Create(destPath);
+            if (_archiveType == ArchiveType.TarZstd)
+            {
+                ICompressor compressor = ZstdSharpCompressor.Shared;
+                Stream tarStream = new MemoryStream();
+                TarFile.CreateFromDirectory(dirPath, tarStream, false);
+                compressor.Compress(tarStream, destStream);
+                tarStream.Dispose();
+            }
+            else if (_archiveType == ArchiveType.Zip)
+            {
+                ZipFile.CreateFromDirectory(dirPath, destStream);
+            }
+            destStream.Dispose();
         }
 
         private JObject AddPreviousEpochs(
