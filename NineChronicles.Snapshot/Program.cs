@@ -700,20 +700,26 @@ namespace NineChronicles.Snapshot
 
         private void ArchiveDirectory(string dirPath, string destPath)
         {
-            Stream destStream = File.Create(destPath);
+            using FileStream destStream = File.Create(destPath);
             if (_archiveType == ArchiveType.TarZstd)
             {
-                ICompressor compressor = ZstdSharpCompressor.Shared;
-                Stream tarStream = new MemoryStream();
-                TarFile.CreateFromDirectory(dirPath, tarStream, false);
-                compressor.Compress(tarStream, destStream);
-                tarStream.Dispose();
+                try
+                {
+                    using FileStream destTarStream = File.Create(Path.GetTempFileName());
+                    TarFile.CreateFromDirectory(dirPath, destTarStream, false);
+                    destTarStream.Seek(0, SeekOrigin.Begin);
+                    ZstdSharpCompressor.Shared.Compress(destTarStream, destStream);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex.Message);
+                    _logger.Error(ex.StackTrace);
+                }
             }
             else if (_archiveType == ArchiveType.Zip)
             {
                 ZipFile.CreateFromDirectory(dirPath, destStream);
             }
-            destStream.Dispose();
         }
 
         private JObject AddPreviousEpochs(

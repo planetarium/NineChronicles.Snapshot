@@ -23,7 +23,7 @@ RUN dotnet publish NineChronicles.Snapshot/NineChronicles.Snapshot.csproj \
     --version-suffix $COMMIT
 
 # Build runtime image
-FROM --platform=linux/arm64 mcr.microsoft.com/dotnet/aspnet:8.0-bullseye-slim-arm64v8
+FROM --platform=linux/arm64 mcr.microsoft.com/dotnet/aspnet:8.0-bookworm-slim
 WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libc6-dev \
