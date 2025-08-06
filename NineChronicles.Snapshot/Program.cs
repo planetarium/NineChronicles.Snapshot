@@ -39,6 +39,8 @@ namespace NineChronicles.Snapshot
             { ArchiveType.TarZstd, "tar.zst" }
         };
 
+        private int _compressionLevel;
+
         private RocksDBStore _store;
         private TrieStateStore _stateStore;
         private ILogger _logger;
@@ -59,6 +61,7 @@ namespace NineChronicles.Snapshot
             [Option("bypass-copystates")]
             bool bypassCopyStates = false,
             bool zstd = false,
+            int compressionLevel = 0,
             string storePath = null,
             int blockBefore = 1,
             SnapshotType snapshotType = SnapshotType.Partition)
@@ -74,13 +77,15 @@ namespace NineChronicles.Snapshot
 
                 if (zstd)
                 {
-                    _logger.Debug("Compression method: Zstd");
+                    _logger.Debug("Compression method: Zstd (Tar)");
                     _archiveType = ArchiveType.TarZstd;
                 }
                 else
                 {
                     _logger.Debug("Compression method: Zip (Default)");
                 }
+                _logger.Debug("Compression level: {CompressionLevel}", compressionLevel);
+                _compressionLevel = compressionLevel;
 
                 var snapshotStart = DateTimeOffset.Now;
                 _logger.Debug($"Create Snapshot-{snapshotType.ToString()} start.");
@@ -354,7 +359,7 @@ namespace NineChronicles.Snapshot
 
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition Archive Start.");
                     start = DateTimeOffset.Now;
-                    ArchiveDirectory(partitionSnapshotPath, storePath, epochLimit, new[] { "block", "tx" });
+                    ArchiveDirectory(partitionSnapshotPath, storePath, epochLimit, new[] { "block", "tx" }, new[] { "blockindex", "txindex" });
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition Archive Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State Archive Start.");
@@ -587,15 +592,23 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private void ArchiveDirectory(string destPath, string srcDirPath, int? epochLimit = null, string[] subDirs = null)
+        private void ArchiveDirectory(
+            string destPath,
+            string srcDirPath,
+            int? epochLimit = null,
+            string[] subDirs = null,
+            string[] excludeDirs = null)
         {
-            var archiveEntries = ArchivePaths(srcDirPath, epochLimit, subDirs);
+            var archiveEntries = ArchivePaths(srcDirPath, epochLimit, subDirs, excludeDirs)
+                .Select(path => Path.GetRelativePath(srcDirPath, path));
 
             try
             {
                 using FileStream destStream = File.Create(destPath);
                 if (_archiveType == ArchiveType.TarZstd)
                 {
+                    var compressor = new ZstdSharpCompressor(this._compressionLevel);
+
                     using FileStream destTarStream = File.Create(Path.GetTempFileName(), 4096, FileOptions.DeleteOnClose);
                     using TarWriter tarWriter = new TarWriter(destTarStream, TarEntryFormat.Pax);
                     foreach (var entry in archiveEntries)
@@ -604,14 +617,15 @@ namespace NineChronicles.Snapshot
                         tarWriter.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, entry) { DataStream = input });
                     }
                     destTarStream.Seek(0, SeekOrigin.Begin);
-                    ZstdSharpCompressor.Shared.Compress(destTarStream, destStream);
+
+                    compressor.Compress(destTarStream, destStream);
                 }
                 else if (_archiveType == ArchiveType.Zip)
                 {
                     using ZipArchive zipArchive = new ZipArchive(destStream, ZipArchiveMode.Create);
                     foreach (var entry in archiveEntries)
                     {
-                        zipArchive.CreateEntryFromFile(entry, Path.GetFileName(entry));
+                        zipArchive.CreateEntryFromFile(Path.Combine(srcDirPath, entry), entry, (CompressionLevel)_compressionLevel);
                     }
                 }
             }
@@ -622,23 +636,35 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private string[] ArchivePaths(string dirPath, int? epochLimit = null, string[] subDirs = null)
+        private string[] ArchivePaths(
+            string dirPath,
+            int? epochLimit = null,
+            string[] subDirs = null,
+            string[] excludeDirs = null)
         {
             if (subDirs != null)
             {
-                return subDirs.SelectMany(subDir => ArchivePaths(Path.Combine(dirPath, subDir), epochLimit)).ToArray();
+                return subDirs.SelectMany(subDir => ArchivePaths(
+                    Path.Combine(dirPath, subDir),
+                    epochLimit: epochLimit,
+                    excludeDirs: excludeDirs)
+                ).ToArray();
             }
 
-            if (epochLimit.HasValue
-                && int.TryParse(Regex.Match(dirPath.Split("/").Last(), @"^epoch(\d+)$").Groups[1].Value, out int epoch)
-                && epoch < epochLimit.Value)
+            var dirName = dirPath.Split("/").Last();
+
+            if ((excludeDirs is { } && excludeDirs.Contains(dirName))
+                || (epochLimit.HasValue
+                    && int.TryParse(Regex.Match(dirName, @"^epoch(\d+)$").Groups[1].Value, out int epoch)
+                    && epoch < epochLimit.Value))
             {
                 return new[] { "" };
             }
 
             var files = Directory.GetFiles(dirPath);
             var directories = Directory.GetDirectories(dirPath)
-                .SelectMany(subdir => ArchivePaths(subdir, epochLimit)).Where(x => x != "");
+                .SelectMany(subdir => ArchivePaths(subdir, epochLimit, excludeDirs: excludeDirs))
+                .Where(path => path != "");
 
             return files.Concat(directories).ToArray();
         }
