@@ -2,19 +2,20 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <LangVersion>8</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Cocona.Lite" Version="2.0.3" />
+    <PackageReference Include="EasyCompressor.ZstdSharp" Version="2.1.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0-preview.3.23174.8" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="Serilog.Formatting.Compact" Version="1.1.0" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="3.4.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.1.1-dev-00910" />
   </ItemGroup>
-  
+
   <ItemGroup>
     <ProjectReference Include="..\libplanet\src\Libplanet\Libplanet.csproj" />
     <ProjectReference Include="..\libplanet\src\Libplanet.RocksDBStore\Libplanet.RocksDBStore.csproj" />
@@ -25,5 +26,5 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-  
+
 </Project>

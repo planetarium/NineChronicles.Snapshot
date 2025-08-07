@@ -1,25 +1,27 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using Bencodex.Types;
 using Cocona;
+using EasyCompressor;
 using Libplanet.Action;
 using Libplanet.Action.Loader;
 using Libplanet.Types.Blocks;
 using Libplanet.RocksDBStore;
 using Libplanet.Store;
-using Libplanet.Store.Trie;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Libplanet.Blockchain;
 using Libplanet.Blockchain.Policies;
 using Libplanet.Common;
 using Libplanet.Crypto;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Serilog;
 using ILogger = Serilog.ILogger;
 
@@ -27,21 +29,24 @@ namespace NineChronicles.Snapshot
 {
     class Program
     {
+        public enum SnapshotType { Full, Partition, All }
+
+        private enum ArchiveType { Zip, TarZstd }
+
+        private static readonly IReadOnlyDictionary<ArchiveType, string> _archiveExtensions = new Dictionary<ArchiveType, string>
+        {
+            { ArchiveType.Zip, "zip" },
+            { ArchiveType.TarZstd, "tar.zst" }
+        };
+
+        private int _compressionLevel;
+
         private RocksDBStore _store;
         private TrieStateStore _stateStore;
         private ILogger _logger;
 
-        public enum SnapshotType { Full, Partition, All }
-
-        private static readonly List<string> STATE_PATHS = new List<string>() {
-            Path.Combine("block", "blockindex"),
-            Path.Combine("tx", "txindex"),
-            Path.Combine("txbindex"),
-            Path.Combine("states"),
-            Path.Combine("chain"),
-            Path.Combine("blockcommit"),
-            Path.Combine("txexec")
-        };
+        private ArchiveType _archiveType = ArchiveType.Zip;
+        private string ArchiveExtension { get => _archiveExtensions[_archiveType]; }
 
         static void Main(string[] args)
         {
@@ -55,6 +60,8 @@ namespace NineChronicles.Snapshot
             string outputDirectory,
             [Option("bypass-copystates")]
             bool bypassCopyStates = false,
+            bool zstd = false,
+            int compressionLevel = 0,
             string storePath = null,
             int blockBefore = 1,
             SnapshotType snapshotType = SnapshotType.Partition)
@@ -67,6 +74,18 @@ namespace NineChronicles.Snapshot
                 var loggerConf = new LoggerConfiguration()
                     .ReadFrom.Configuration(configuration);
                 _logger = loggerConf.CreateLogger();
+
+                if (zstd)
+                {
+                    _logger.Debug("Compression method: Zstd (Tar)");
+                    _archiveType = ArchiveType.TarZstd;
+                }
+                else
+                {
+                    _logger.Debug("Compression method: Zip (Default)");
+                }
+                _logger.Debug("Compression level: {CompressionLevel}", compressionLevel);
+                _compressionLevel = compressionLevel;
 
                 var snapshotStart = DateTimeOffset.Now;
                 _logger.Debug($"Create Snapshot-{snapshotType.ToString()} start.");
@@ -89,7 +108,6 @@ namespace NineChronicles.Snapshot
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "state"));
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "metadata"));
                 Directory.CreateDirectory(Path.Combine(outputDirectory, "full"));
-                Directory.CreateDirectory(Path.Combine(outputDirectory, "temp"));
 
                 outputDirectory = string.IsNullOrEmpty(outputDirectory)
                     ? Environment.CurrentDirectory
@@ -307,27 +325,13 @@ namespace NineChronicles.Snapshot
                 var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
                 var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
                 var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
-                var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}-{snapshotTipIndex}.zip";
+                var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}-{snapshotTipIndex}.{ArchiveExtension}";
                 var fullSnapshotPath = Path.Combine(fullSnapshotDirectory, fullSnapshotFilename);
 
-                var partitionSnapshotFilename = $"{partitionBaseFilename}.zip";
+                var partitionSnapshotFilename = $"{partitionBaseFilename}.{ArchiveExtension}";
                 var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
-                var stateSnapshotFilename = $"{stateBaseFilename}.zip";
+                var stateSnapshotFilename = $"{stateBaseFilename}.{ArchiveExtension}";
                 var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
-
-                var tempDirectory = Path.Combine(storePath, "temp");
-                var partitionDirectory = Path.Combine(tempDirectory, "snapshot");
-                var stateDirectory = Path.Combine(tempDirectory, "state");
-
-                if (Directory.Exists(partitionDirectory))
-                {
-                    Directory.Delete(partitionDirectory, true);
-                }
-
-                if (Directory.Exists(stateDirectory))
-                {
-                    Directory.Delete(stateDirectory, true);
-                }
 
                 _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Store Start.");
                 start = DateTimeOffset.Now;
@@ -342,55 +346,34 @@ namespace NineChronicles.Snapshot
                 {
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Start.");
                     start = DateTimeOffset.Now;
-                    ZipFile.CreateFromDirectory(storePath, fullSnapshotPath);
+                    ArchiveDirectory(fullSnapshotPath, storePath);
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
                 }
 
                 if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
                 {
-                    var storeBlockPath = Path.Combine(storePath, "block");
-                    var storeTxPath = Path.Combine(storePath, "tx");
-                    var partitionDirBlockPath = Path.Combine(partitionDirectory, "block");
-                    var partitionDirTxPath = Path.Combine(partitionDirectory, "tx");
-
                     var epochLimit = GetEpochLimit(
                         latestEpoch,
                         currentMetadataBlockEpoch,
                         previousMetadataBlockEpoch);
 
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Start.");
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition Archive Start.");
                     start = DateTimeOffset.Now;
-                    CopyDirectory(storeBlockPath, partitionDirBlockPath, epochLimit: epochLimit);
-                    CopyDirectory(storeTxPath, partitionDirTxPath, epochLimit: epochLimit);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Clone Partition Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                    ArchiveDirectory(partitionSnapshotPath, storePath, epochLimit, new[] { "block", "tx" }, new[] { "blockindex", "txindex" });
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition Archive Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Start.");
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State Archive Start.");
                     start = DateTimeOffset.Now;
-                    ZipFile.CreateFromDirectory(partitionDirectory, partitionSnapshotPath);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                    Directory.Delete(partitionDirectory, true);
-
-                    STATE_PATHS.ForEach(path => File.Create(Path.Combine(storePath, path, "LOCK")));
-
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move State Directory Start.");
-                    start = DateTimeOffset.Now;
-                    MoveStateStore(storePath, stateDirectory);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move State Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                    STATE_PATHS.ForEach(path => File.Delete(Path.Combine(stateDirectory, path, "LOCK")));
-
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State ZipFile Start.");
-                    start = DateTimeOffset.Now;
-                    ZipFile.CreateFromDirectory(stateDirectory, stateSnapshotPath);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Restore State Directory Start.");
-                    start = DateTimeOffset.Now;
-                    MoveStateStore(stateDirectory, storePath);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Restore State Directory Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                    Directory.Delete(stateDirectory, true);
+                    ArchiveDirectory(stateSnapshotPath, storePath, subDirs: new[] {
+                        "block/blockindex",
+                        "tx/txindex",
+                        "txbindex",
+                        "states",
+                        "chain",
+                        "blockcommit",
+                        "txexec"
+                    });
+                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State Archive Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
 
                     if (snapshotTipDigest is null)
                     {
@@ -557,11 +540,6 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private void MoveStateStore(string src, string dst)
-        {
-            STATE_PATHS.ForEach(path => CopyDirectory(Path.Combine(src, path), Path.Combine(dst, path), moveInsteadOfCopy: true));
-        }
-
         private void Fork(
             Guid src,
             Guid dest,
@@ -614,50 +592,40 @@ namespace NineChronicles.Snapshot
             }
         }
 
-        private void CopyDirectory(string sourceDir, string destinationDir, bool recursive = true, bool moveInsteadOfCopy = false, int? epochLimit = null)
+        private void ArchiveDirectory(
+            string destPath,
+            string srcDirPath,
+            int? epochLimit = null,
+            string[] subDirs = null,
+            string[] excludeDirs = null)
         {
+            var archiveEntries = ArchivePaths(srcDirPath, epochLimit, subDirs, excludeDirs)
+                .Select(path => Path.GetRelativePath(srcDirPath, path));
+
             try
             {
-                // Get information about the source directory
-                var dir = new DirectoryInfo(sourceDir);
-
-                // Check if the source directory exists
-                if (!dir.Exists)
-                    throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
-
-                // Cache directories before we start copying
-                DirectoryInfo[] dirs = dir.GetDirectories();
-
-                // Create the destination directory
-                Directory.CreateDirectory(destinationDir);
-
-                // Get the files in the source directory and copy to the destination directory
-                foreach (FileInfo file in dir.GetFiles())
+                using FileStream destStream = File.Create(destPath);
+                if (_archiveType == ArchiveType.TarZstd)
                 {
-                    string targetFilePath = Path.Combine(destinationDir, file.Name);
-                    if (moveInsteadOfCopy)
+                    var compressor = new ZstdSharpCompressor(this._compressionLevel);
+
+                    using FileStream destTarStream = File.Create(Path.GetTempFileName(), 4096, FileOptions.DeleteOnClose);
+                    using TarWriter tarWriter = new TarWriter(destTarStream, TarEntryFormat.Pax);
+                    foreach (var entry in archiveEntries)
                     {
-                        file.MoveTo(targetFilePath);
+                        using var input = File.OpenRead(Path.Combine(srcDirPath, entry));
+                        tarWriter.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, entry) { DataStream = input });
                     }
-                    else
-                    {
-                        file.CopyTo(targetFilePath);
-                    }
+                    destTarStream.Seek(0, SeekOrigin.Begin);
+
+                    compressor.Compress(destTarStream, destStream);
                 }
-
-                // If recursive and copying subdirectories, recursively call this method
-                if (recursive)
+                else if (_archiveType == ArchiveType.Zip)
                 {
-                    foreach (DirectoryInfo subDir in dirs)
+                    using ZipArchive zipArchive = new ZipArchive(destStream, ZipArchiveMode.Create);
+                    foreach (var entry in archiveEntries)
                     {
-                        if (epochLimit.HasValue
-                            && subDir.Name.StartsWith("epoch")
-                            && int.TryParse(subDir.Name.Substring(5), out int epoch)
-                            && epoch < epochLimit.Value)
-                            continue;
-
-                        string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                        CopyDirectory(subDir.FullName, newDestinationDir, true, moveInsteadOfCopy, epochLimit);
+                        zipArchive.CreateEntryFromFile(Path.Combine(srcDirPath, entry), entry, (CompressionLevel)_compressionLevel);
                     }
                 }
             }
@@ -666,6 +634,39 @@ namespace NineChronicles.Snapshot
                 _logger.Error(ex.Message);
                 _logger.Error(ex.StackTrace);
             }
+        }
+
+        private string[] ArchivePaths(
+            string dirPath,
+            int? epochLimit = null,
+            string[] subDirs = null,
+            string[] excludeDirs = null)
+        {
+            if (subDirs != null)
+            {
+                return subDirs.SelectMany(subDir => ArchivePaths(
+                    Path.Combine(dirPath, subDir),
+                    epochLimit: epochLimit,
+                    excludeDirs: excludeDirs)
+                ).ToArray();
+            }
+
+            var dirName = dirPath.Split("/").Last();
+
+            if ((excludeDirs is { } && excludeDirs.Contains(dirName))
+                || (epochLimit.HasValue
+                    && int.TryParse(Regex.Match(dirName, @"^epoch(\d+)$").Groups[1].Value, out int epoch)
+                    && epoch < epochLimit.Value))
+            {
+                return new[] { "" };
+            }
+
+            var files = Directory.GetFiles(dirPath);
+            var directories = Directory.GetDirectories(dirPath)
+                .SelectMany(subdir => ArchivePaths(subdir, epochLimit, excludeDirs: excludeDirs))
+                .Where(path => path != "");
+
+            return files.Concat(directories).ToArray();
         }
 
         private JObject AddPreviousEpochs(
