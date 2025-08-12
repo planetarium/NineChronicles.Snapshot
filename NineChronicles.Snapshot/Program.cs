@@ -174,7 +174,7 @@ namespace NineChronicles.Snapshot
                     new BlockPolicy();
                 var blockChainStates = new BlockChainStates(_store, _stateStore);
                 var actionEvaluator = new ActionEvaluator(
-                    _ => blockPolicy.BlockAction,
+                    blockPolicy.PolicyActionsRegistry,
                     _stateStore,
                     new NCActionLoader()
                     );
