@@ -6,6 +6,7 @@ on:
       - main
       - rc*
       - experimental
+      - PLD-353
 
 env:
   DOCKER_REPO: planetariumhq/ninechronicles-snapshot
