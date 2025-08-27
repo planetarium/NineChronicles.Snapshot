@@ -151,7 +151,7 @@ namespace NineChronicles.Snapshot
 
                 _store = new RocksDBStore(storePath);
                 var stateKeyValueStore = new RocksDBKeyValueStore(statesPath);
-                _stateStore = new TrieStateStore(stateKeyValueStore);
+                _stateStore = new TrieStateStore(stateKeyValueStore, _logger);
 
                 var canonicalChainId = _store.GetCanonicalChainId();
                 if (!(canonicalChainId is { } chainId))
@@ -290,8 +290,18 @@ namespace NineChronicles.Snapshot
 
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Start.");
                     start = DateTimeOffset.Now;
+
+                    // 메모리 사용량 측정 시작
+                    var memoryBefore = GC.GetTotalMemory(false);
+
                     _stateStore.CopyStates(stateHashes, newStateStore);
+
+                    // 메모리 사용량 측정 종료
+                    var memoryAfter = GC.GetTotalMemory(false);
+                    var memoryUsed = (memoryAfter - memoryBefore) / (1024.0 * 1024.0); // MB
+
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} CopyStates Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                    _logger.Information($"Memory Usage during CopyStates: {memoryUsed:F2} MB");
 
                     newStateStore.Dispose();
                     newStateKeyValueStore.Dispose();
