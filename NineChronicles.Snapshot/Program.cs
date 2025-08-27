@@ -309,96 +309,96 @@ namespace NineChronicles.Snapshot
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} Previous States Size: {(float)statesPathSize / 1024 / 1024 / 1024} GiB");
                     _logger.Debug($"Snapshot-{snapshotType.ToString()} New States Size: {(float)newStatesPathSize / 1024 / 1024 / 1024} GiB");
 
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Start.");
-                    start = DateTimeOffset.Now;
-                    Directory.Delete(statesPath, recursive: true);
-                    Directory.Move(newStatesPath, statesPath);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min");
+                    // _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Start.");
+                    // start = DateTimeOffset.Now;
+                    // Directory.Delete(statesPath, recursive: true);
+                    // Directory.Move(newStatesPath, statesPath);
+                    // _logger.Debug($"Snapshot-{snapshotType.ToString()} Move States Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min");
                 }
 
-                var partitionBaseFilename = GetPartitionBaseFileName(
-                    currentMetadataBlockEpoch,
-                    currentMetadataTxEpoch,
-                    latestEpoch);
-                var stateBaseFilename = "state_latest";
-
-                var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
-                var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
-                var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
-                var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}-{snapshotTipIndex}.{ArchiveExtension}";
-                var fullSnapshotPath = Path.Combine(fullSnapshotDirectory, fullSnapshotFilename);
-
-                var partitionSnapshotFilename = $"{partitionBaseFilename}.{ArchiveExtension}";
-                var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
-                var stateSnapshotFilename = $"{stateBaseFilename}.{ArchiveExtension}";
-                var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
-
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Store Start.");
-                start = DateTimeOffset.Now;
-                CleanStore(
-                    partitionSnapshotPath,
-                    stateSnapshotPath,
-                    fullSnapshotPath,
-                    storePath);
-                _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Store Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
-                {
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Start.");
-                    start = DateTimeOffset.Now;
-                    ArchiveDirectory(fullSnapshotPath, storePath);
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-                }
-
-                if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
-                {
-                    var epochLimit = GetEpochLimit(
-                        latestEpoch,
-                        currentMetadataBlockEpoch,
-                        previousMetadataBlockEpoch);
-
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition Archive Start.");
-                    start = DateTimeOffset.Now;
-                    ArchiveDirectory(partitionSnapshotPath, storePath, epochLimit, new[] { "block", "tx" }, new[] { "blockindex", "txindex" });
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition Archive Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State Archive Start.");
-                    start = DateTimeOffset.Now;
-                    ArchiveDirectory(stateSnapshotPath, storePath, subDirs: new[] {
-                        "block/blockindex",
-                        "tx/txindex",
-                        "txbindex",
-                        "states",
-                        "chain",
-                        "blockcommit",
-                        "txexec"
-                    });
-                    _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State Archive Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
-
-                    if (snapshotTipDigest is null)
-                    {
-                        throw new CommandExitedException("Tip does not exist.", -1);
-                    }
-
-                    string stringfyMetadata = CreateMetadata(
-                        snapshotTipDigest.Value,
-                        apv,
-                        currentMetadataBlockEpoch,
-                        currentMetadataTxEpoch,
-                        previousMetadataBlockEpoch,
-                        latestEpoch);
-                    var metadataFilename = $"{partitionBaseFilename}.json";
-                    var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
-
-                    if (File.Exists(metadataPath))
-                    {
-                        File.Delete(metadataPath);
-                    }
-
-                    File.WriteAllText(metadataPath, stringfyMetadata);
-                }
-
-                _logger.Debug($"Create Snapshot-{snapshotType.ToString()} Complete. Time Taken: {(DateTimeOffset.Now - snapshotStart).TotalMinutes} min.");
+                // var partitionBaseFilename = GetPartitionBaseFileName(
+                //     currentMetadataBlockEpoch,
+                //     currentMetadataTxEpoch,
+                //     latestEpoch);
+                // var stateBaseFilename = "state_latest";
+                //
+                // var fullSnapshotDirectory = Path.Combine(outputDirectory, "full");
+                // var genesisHashHex = ByteUtil.Hex(genesisHash.ToByteArray());
+                // var snapshotTipHashHex = ByteUtil.Hex(snapshotTipHash.ToByteArray());
+                // var fullSnapshotFilename = $"{genesisHashHex}-snapshot-{snapshotTipHashHex}-{snapshotTipIndex}.{ArchiveExtension}";
+                // var fullSnapshotPath = Path.Combine(fullSnapshotDirectory, fullSnapshotFilename);
+                //
+                // var partitionSnapshotFilename = $"{partitionBaseFilename}.{ArchiveExtension}";
+                // var partitionSnapshotPath = Path.Combine(outputDirectory, "partition", partitionSnapshotFilename);
+                // var stateSnapshotFilename = $"{stateBaseFilename}.{ArchiveExtension}";
+                // var stateSnapshotPath = Path.Combine(outputDirectory, "state", stateSnapshotFilename);
+                //
+                // _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Store Start.");
+                // start = DateTimeOffset.Now;
+                // CleanStore(
+                //     partitionSnapshotPath,
+                //     stateSnapshotPath,
+                //     fullSnapshotPath,
+                //     storePath);
+                // _logger.Debug($"Snapshot-{snapshotType.ToString()} Clean Store Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                //
+                // if (snapshotType == SnapshotType.Full || snapshotType == SnapshotType.All)
+                // {
+                //     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Start.");
+                //     start = DateTimeOffset.Now;
+                //     ArchiveDirectory(fullSnapshotPath, storePath);
+                //     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Full ZipFile Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                // }
+                //
+                // if (snapshotType == SnapshotType.Partition || snapshotType == SnapshotType.All)
+                // {
+                //     var epochLimit = GetEpochLimit(
+                //         latestEpoch,
+                //         currentMetadataBlockEpoch,
+                //         previousMetadataBlockEpoch);
+                //
+                //     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition Archive Start.");
+                //     start = DateTimeOffset.Now;
+                //     ArchiveDirectory(partitionSnapshotPath, storePath, epochLimit, new[] { "block", "tx" }, new[] { "blockindex", "txindex" });
+                //     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create Partition Archive Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                //
+                //     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State Archive Start.");
+                //     start = DateTimeOffset.Now;
+                //     ArchiveDirectory(stateSnapshotPath, storePath, subDirs: new[] {
+                //         "block/blockindex",
+                //         "tx/txindex",
+                //         "txbindex",
+                //         "states",
+                //         "chain",
+                //         "blockcommit",
+                //         "txexec"
+                //     });
+                //     _logger.Debug($"Snapshot-{snapshotType.ToString()} Create State Archive Done. Time Taken: {(DateTimeOffset.Now - start).TotalMinutes} min.");
+                //
+                //     if (snapshotTipDigest is null)
+                //     {
+                //         throw new CommandExitedException("Tip does not exist.", -1);
+                //     }
+                //
+                //     string stringfyMetadata = CreateMetadata(
+                //         snapshotTipDigest.Value,
+                //         apv,
+                //         currentMetadataBlockEpoch,
+                //         currentMetadataTxEpoch,
+                //         previousMetadataBlockEpoch,
+                //         latestEpoch);
+                //     var metadataFilename = $"{partitionBaseFilename}.json";
+                //     var metadataPath = Path.Combine(metadataDirectory, metadataFilename);
+                //
+                //     if (File.Exists(metadataPath))
+                //     {
+                //         File.Delete(metadataPath);
+                //     }
+                //
+                //     File.WriteAllText(metadataPath, stringfyMetadata);
+                // }
+                //
+                // _logger.Debug($"Create Snapshot-{snapshotType.ToString()} Complete. Time Taken: {(DateTimeOffset.Now - snapshotStart).TotalMinutes} min.");
             }
             catch (Exception ex)
             {
